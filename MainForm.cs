@@ -23,6 +23,7 @@ internal sealed class MainForm : Form
     private readonly CheckBox _details = new();
     private readonly ContextMenuStrip _moreMenu = new();
     private readonly ToolTip _toolTip = new();
+    private readonly Icon _applicationIcon;
     private TableLayoutPanel _root = null!;
     private readonly Dictionary<Control, (float Size, FontStyle Style)> _fontSpecs = new();
     private readonly List<(TelemetryPanel Container, TableLayoutPanel Content)> _cardPanels = new();
@@ -77,7 +78,10 @@ internal sealed class MainForm : Form
         _trayMenu.Items.Add("종료", null, (_, _) => { _exitRequested = true; Close(); });
         _cpuTray = new TrayTemperature("CPU", Theme.Coral, _trayMenu, RestoreWindow);
         _gpuTray = new TrayTemperature("GPU", Theme.Lavender, _trayMenu, RestoreWindow);
-        Icon = SystemIcons.Application;
+        using (var iconStream = typeof(Program).Assembly.GetManifestResourceStream("SoyTemperature.AppIcon")
+            ?? throw new InvalidOperationException("앱 아이콘 리소스가 없습니다."))
+            _applicationIcon = new Icon(iconStream, new Size(S(32), S(32)));
+        Icon = _applicationIcon;
         Shown += (_, _) =>
         {
             var area = Screen.FromControl(this).WorkingArea;
@@ -380,6 +384,8 @@ internal sealed class MainForm : Form
         _verificationFinished = true;
         var intervals = _samples.Zip(_samples.Skip(1), (a, b) => (b.Timestamp - a.Timestamp).TotalMilliseconds).ToArray();
         SaveWindow(Path.Combine(_verifyDirectory!, "window.png"));
+        using (var iconBitmap = _applicationIcon.ToBitmap())
+            iconBitmap.Save(Path.Combine(_verifyDirectory!, "app-icon.png"), ImageFormat.Png);
         var report = new
         {
             Started = _samples[0].Timestamp,
@@ -393,6 +399,9 @@ internal sealed class MainForm : Form
             ActualIntervalsMilliseconds = intervals,
             UiRowCount = _grid.Rows.Count,
             UiVisible = Visible,
+            AppIconResource = "SoyTemperature.AppIcon",
+            AppIconWidth = _applicationIcon.Width,
+            AppIconHeight = _applicationIcon.Height,
             Dpi = DeviceDpi,
             WindowSize = new { Width, Height },
             AutoScale = new { AutoScaleDimensions.Width, AutoScaleDimensions.Height },
@@ -466,6 +475,7 @@ internal sealed class MainForm : Form
         _trayMenu.Dispose();
         _moreMenu.Dispose();
         _toolTip.Dispose();
+        _applicationIcon.Dispose();
         _stop.Dispose();
         _canClose = true;
         Close();

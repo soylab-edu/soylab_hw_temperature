@@ -4,5 +4,6 @@ obj/
 vendor/
 artifacts/
 dist/
+1.0.0/
 *.user
 Resources/PawnIO_setup.exe

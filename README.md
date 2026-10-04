@@ -4,7 +4,7 @@ Windows 10/11 x64용 C# WinForms 온도 모니터. LibreHardwareMonitorLib 0.9.6
 
 ## 실행
 
-[Windows 실행 파일 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest)에서 ZIP을 풀고 `SoyTemperature.exe`를 실행하세요. 로컬 빌드 결과는 `dist/SoyTemperature.exe`입니다. .NET 런타임이 들어 있는 단일 exe이므로 사용자는 .NET을 따로 설치할 필요가 없습니다. 재빌드에는 .NET 10 SDK가 필요합니다.
+[Windows 실행 파일 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest)에서 exe를 직접 받거나 ZIP의 `1.0.0` 폴더를 풀어 실행하세요. 로컬 최종 배포 파일은 `1.0.0/SoyTemperature.exe`입니다. 폴더에는 exe 하나만 들어 있으며, .NET 런타임과 앱 아이콘이 포함되어 별도 .NET이나 이미지 파일 없이 실행합니다. 재빌드에는 .NET 10 SDK가 필요합니다.
 
 - CPU 온도는 **관리자 권한**과 **PawnIO 드라이버**가 필요합니다. exe를 우클릭해 관리자 권한으로 실행하거나, 앱의 **더 보기 → 관리자 실행**을 사용하세요.
 - PawnIO가 없는 다른 PC에서는 **더 보기 → CPU 드라이버 설치**로 공식 PawnIO 2.2.0 설치 파일을 다운로드합니다. SHA-256을 확인한 뒤 UAC 승인을 요청하며, 드라이버 설치에는 인터넷이 필요합니다.
@@ -24,11 +24,13 @@ SOYLAB Comfy Router의 짙은 보라색과 코랄·라벤더·초록 포인트�
 
 ## 빌드
 
+SOYLAB 로고의 컬러 무늬와 중앙의 큰 온도계를 조합한 아이콘을 exe·창·작업 표시줄에 적용했습니다. 원본 PNG와 Windows ICO는 `img`에 보관하고, 제작 프롬프트는 [icon-design.md](img/icon-design.md)에 기록했습니다. PNG를 바꾸면 `export-icon.ps1`로 ICO를 갱신한 뒤 빌드하세요.
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-빌드 스크립트는 SDK가 없으면 Microsoft 공식 설치 스크립트로 `.tools/dotnet`에 .NET 10 SDK를 설치합니다. 시스템 PATH를 변경하지 않습니다. 패키지 버전은 `packages.lock.json`에 기록합니다. 결과는 `dist/SoyTemperature.exe`입니다.
+빌드 스크립트는 SDK가 없으면 Microsoft 공식 설치 스크립트로 `.tools/dotnet`에 .NET 10 SDK를 설치합니다. 시스템 PATH를 변경하지 않습니다. 패키지 버전은 `packages.lock.json`에 기록합니다. 결과는 `1.0.0/SoyTemperature.exe`입니다.
 
 관리자 실행:
 
@@ -39,8 +41,8 @@ powershell -ExecutionPolicy Bypass -File .\launch.ps1
 ## 검증
 
 ```powershell
-.\dist\SoyTemperature.exe --self-test
-.\dist\SoyTemperature.exe --verify C:\Temp\SoyVerification --verify-exit
+.\1.0.0\SoyTemperature.exe --self-test
+.\1.0.0\SoyTemperature.exe --verify C:\Temp\SoyVerification --verify-exit
 ```
 
 `--self-test`는 센서별 최저·최고, 값 없음, NaN, 기록 초기화를 검증합니다. `--verify`는 실제 WinForms 창을 띄워 6회 측정하면서 트레이로 숨기기/복원, 기록 초기화, 센서 상세, 작은 창의 글자 맞춤을 확인합니다. `verification.json`, `samples.jsonl`, `hardware-report.txt`, 실행 중인 창의 `DrawToBitmap` 이미지와 트레이 아이콘 이미지를 저장합니다. 실제 센서 데이터만 사용하며, 읽을 수 없는 값은 null입니다.
