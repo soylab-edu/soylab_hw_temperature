@@ -67,6 +67,12 @@ internal sealed class WindowFrame : TableLayoutPanel
         using var outline = RoundedShape.Create(new RectangleF(inset, inset, Width - inset * 2, Height - inset * 2), 26 * scale - inset);
         using var pen = new Pen(Theme.FrameEdge, width);
         e.Graphics.DrawPath(pen, outline);
+        using var grip = new Pen(Color.FromArgb(140, Theme.FrameEdge), Math.Max(1, scale)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        for (var index = 0; index < 3; index++)
+        {
+            var distance = (12 + index * 5) * scale;
+            e.Graphics.DrawLine(grip, Width - distance, Height - 9 * scale, Width - 9 * scale, Height - distance);
+        }
     }
 }
 

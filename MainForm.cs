@@ -36,7 +36,7 @@ internal sealed class MainForm : Form
     private MonitorSnapshot? _latest;
     private DateTimeOffset? _historyBeforeReset;
     private bool _closing, _canClose, _trayMode;
-    private bool _trayVerified, _restoreVerified, _resetVerified, _responsiveVerified, _resizeVerified, _verificationFinished;
+    private bool _trayVerified, _restoreVerified, _resetVerified, _responsiveVerified, _resizeVerified, _cursorVerified, _verificationFinished;
 
     public MainForm(string[] args)
     {
@@ -55,7 +55,7 @@ internal sealed class MainForm : Form
         Font = new Font("맑은 고딕", 10, FontStyle.Bold);
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(S(520), S(300));
-        MinimumSize = new Size(S(380), S(230));
+        MinimumSize = new Size(S(260), S(180));
         DoubleBuffered = true;
         using (var stream = typeof(Program).Assembly.GetManifestResourceStream("SoyTemperature.AppIcon")!)
             _applicationIcon = new Icon(stream, new Size(S(32), S(32)));
@@ -97,10 +97,13 @@ internal sealed class MainForm : Form
         _root.RowStyles.Add(new(SizeType.Percent, 100));
         Controls.Add(_root);
         _root.MouseDown += DragWindow;
+        _root.MouseMove += UpdateResizeCursor;
+        _root.MouseLeave += (_, _) => _root.Cursor = Cursors.Default;
         _windowControls.Dock = DockStyle.Fill;
         _windowControls.Margin = Padding.Empty;
         _windowControls.WrapContents = false;
         _windowControls.MouseDown += DragWindow;
+        _windowControls.MouseMove += UpdateResizeCursor;
         _closeButton.Click += (_, _) => Close();
         _minimizeButton.Click += (_, _) => MinimizeToTray();
         _websiteButton.Click += (_, _) => OpenSoylab();
@@ -113,6 +116,7 @@ internal sealed class MainForm : Form
         _root.Controls.Add(_windowControls, 0, 0);
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         cards.MouseDown += DragWindow;
+        cards.MouseMove += UpdateResizeCursor;
         string[] categories = ["CPU", "GPU"];
         Color[] colors = [Theme.Coral, Theme.Lavender];
         for (var i = 0; i < 2; i++)
@@ -126,6 +130,7 @@ internal sealed class MainForm : Form
             };
             _tiles[categories[i]] = tile;
             tile.MouseDown += DragWindow;
+            tile.MouseMove += UpdateResizeCursor;
             cards.Controls.Add(tile, i, 0);
         }
         _root.Controls.Add(cards, 0, 1);
@@ -138,12 +143,14 @@ internal sealed class MainForm : Form
     {
         if (_tiles.Count != 2 || WindowState == FormWindowState.Minimized) return;
         var scale = Math.Clamp(Math.Min(ClientSize.Width / (520f * DeviceDpi / 96f),
-            ClientSize.Height / (300f * DeviceDpi / 96f)), .7f, 1.4f);
+            ClientSize.Height / (300f * DeviceDpi / 96f)), .5f, 1.4f);
         _root.Padding = new Padding((int)(S(22) * scale), (int)(S(14) * scale), (int)(S(22) * scale), (int)(S(22) * scale));
-        _root.RowStyles[0].Height = S(38) * scale;
+        _windowControls.Margin = new Padding(Math.Max(0, S(26) - _root.Padding.Left), Math.Max(0, S(14) - _root.Padding.Top), 0, 0);
+        _root.RowStyles[0].Height = Math.Max(S(30), S(38) * scale);
         foreach (var button in new[] { _closeButton, _minimizeButton, _websiteButton })
         {
-            button.Size = new Size((int)(S(24) * scale), (int)(S(24) * scale));
+            var buttonSize = Math.Max(S(20), (int)(S(24) * scale));
+            button.Size = new Size(buttonSize, buttonSize);
             button.Margin = new Padding(0, 0, (int)(S(2) * scale), 0);
         }
         using var outline = RoundedShape.Create(new RectangleF(0, 0, Width, Height), S(26));
@@ -249,7 +256,7 @@ internal sealed class MainForm : Form
         if (_samples.Count == 5)
         {
             var original = ClientSize;
-            ClientSize = new Size(S(380), S(230));
+            ClientSize = MinimumSize;
             UpdateResponsiveLayout();
             SaveWindow(Path.Combine(_verifyDirectory, "compact-window.png"));
             _responsiveVerified = _tiles.Values.All(tile => tile.TextFits) && ButtonFits();
@@ -257,6 +264,22 @@ internal sealed class MainForm : Form
                 && ResizeHit(new Point(Width - 2, Height / 2)) == 11
                 && ResizeHit(new Point(Width / 2, 2)) == 12
                 && ResizeHit(new Point(Width / 2, Height - 2)) == 15;
+            _resizeVerified &= ResizeHit(new Point(S(16), S(16))) == 13
+                && ResizeHit(new Point(Width - S(16), S(16))) == 14
+                && ResizeHit(new Point(S(16), Height - S(16))) == 16
+                && ResizeHit(new Point(Width - S(16), Height - S(16))) == 17;
+            _cursorVerified = CursorMatches(new Point(2, Height / 2), Cursors.SizeWE)
+                && CursorMatches(new Point(Width / 2, 2), Cursors.SizeNS)
+                && CursorMatches(new Point(S(16), S(16)), Cursors.SizeNWSE)
+                && CursorMatches(new Point(Width - S(16), S(16)), Cursors.SizeNESW);
+            _root.Cursor = Cursors.Default;
+            foreach (var size in new[] { new Size(S(320), S(180)), new Size(S(260), S(300)) })
+            {
+                ClientSize = size;
+                UpdateResponsiveLayout();
+                SaveWindow(Path.Combine(_verifyDirectory, $"resize-{size.Width}x{size.Height}.png"));
+                _responsiveVerified &= _tiles.Values.All(tile => tile.TextFits) && ButtonFits();
+            }
             ClientSize = original;
             UpdateResponsiveLayout();
         }
@@ -298,6 +321,8 @@ internal sealed class MainForm : Form
             FrameStrokeLogicalPixels = 3.5f,
             PurpleFrameDrawnPassed = framePassed,
             ResizeEdgesPassed = _resizeVerified,
+            MinimumWindowLogicalSize = new { Width = 260, Height = 180 },
+            ResizeCursorPassed = _cursorVerified,
             StorageMonitoringDisabled = !_latest!.Rows.Any(row => row.Category == "SSD/HDD"),
             TemperatureGraphSamples = _tiles.ToDictionary(pair => pair.Key, pair => pair.Value.GraphSamples),
             FontFamily = _fonts.Family.Name, FontWeight = "Bold (700)", EmbeddedFont = true,
@@ -308,7 +333,7 @@ internal sealed class MainForm : Form
             FinalSnapshot = _latest
         };
         File.WriteAllText(Path.Combine(_verifyDirectory!, "verification.json"), JsonSerializer.Serialize(report, Program.JsonOptions));
-        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_responsiveVerified || !_resizeVerified || !report.LabelsFit || !report.RoundedWindowPassed || !framePassed
+        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_responsiveVerified || !_resizeVerified || !_cursorVerified || !report.LabelsFit || !report.RoundedWindowPassed || !framePassed
             || (Program.IsAdministrator && LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled && !cpu.HasValue)) Environment.ExitCode = 1;
         if (_verifyWebsite && !_websiteLaunchSucceeded) Environment.ExitCode = 1;
         if (_verifyExit) _closeButton.PerformClick();
@@ -447,8 +472,44 @@ internal sealed class MainForm : Form
     private void DragWindow(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
+        var point = sender is Control control ? PointToClient(control.PointToScreen(e.Location)) : e.Location;
+        var hit = ResizeHitAt(point);
+        var screen = PointToScreen(point);
         ReleaseCapture();
-        SendMessage(Handle, 0xA1, 2, 0);
+        SendMessage(Handle, 0xA1, hit == 1 ? 2 : hit, (screen.Y << 16) | (screen.X & 0xffff));
+    }
+
+    private void UpdateResizeCursor(object? sender, MouseEventArgs e)
+    {
+        if (sender is not Control control) return;
+        var hit = ResizeHitAt(PointToClient(control.PointToScreen(e.Location)));
+        control.Cursor = hit switch
+        {
+            10 or 11 => Cursors.SizeWE,
+            12 or 15 => Cursors.SizeNS,
+            13 or 17 => Cursors.SizeNWSE,
+            14 or 16 => Cursors.SizeNESW,
+            _ => Cursors.Default
+        };
+    }
+
+    private bool CursorMatches(Point point, Cursor expected)
+    {
+        UpdateResizeCursor(_root, new MouseEventArgs(MouseButtons.None, 0, point.X, point.Y, 0));
+        return _root.Cursor == expected;
+    }
+
+    private int ResizeHitAt(Point point)
+    {
+        if (point.X < 0 || point.Y < 0 || point.X >= Width || point.Y >= Height) return 1;
+        var corner = S(26);
+        if (point.X < corner && point.Y < corner) return 13;
+        if (point.X >= Width - corner && point.Y < corner) return 14;
+        if (point.X < corner && point.Y >= Height - corner) return 16;
+        if (point.X >= Width - corner && point.Y >= Height - corner) return 17;
+        var edge = S(8);
+        return point.X < edge ? 10 : point.X >= Width - edge ? 11
+            : point.Y < edge ? 12 : point.Y >= Height - edge ? 15 : 1;
     }
 
     private int ResizeHit(Point point)
@@ -463,13 +524,7 @@ internal sealed class MainForm : Form
         if (message.Msg != 0x84 || WindowState != FormWindowState.Normal) return;
         var packed = message.LParam.ToInt64();
         var point = PointToClient(new Point((short)(packed & 0xffff), (short)((packed >> 16) & 0xffff)));
-        var edge = S(7);
-        var left = point.X < edge;
-        var right = point.X >= Width - edge;
-        var top = point.Y < edge;
-        var bottom = point.Y >= Height - edge;
-        message.Result = (IntPtr)(top && left ? 13 : top && right ? 14 : bottom && left ? 16 : bottom && right ? 17
-            : left ? 10 : right ? 11 : top ? 12 : bottom ? 15 : 1);
+        message.Result = (IntPtr)ResizeHitAt(point);
     }
 
     [DllImport("user32.dll")]
