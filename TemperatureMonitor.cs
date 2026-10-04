@@ -1,4 +1,5 @@
 using LibreHardwareMonitor.Hardware;
+using System.Management;
 
 namespace SoyTemperature;
 
@@ -32,7 +33,22 @@ internal sealed class TemperatureMonitor : IDisposable
     private DateTimeOffset _historyStart = DateTimeOffset.Now;
     private long _sequence;
     private int _resetRequested;
-    public void Open() => _computer.Open();
+    private readonly List<string> _storageInventory = new();
+    public void Open()
+    {
+        _computer.Open();
+        // Keep physical disks visible even if a vendor driver exposes no SMART temperature.
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT Model FROM Win32_DiskDrive");
+            using var disks = searcher.Get();
+            foreach (ManagementObject disk in disks)
+            {
+                using (disk) { if (disk["Model"] is string model) _storageInventory.Add(model.Trim()); }
+            }
+        }
+        catch (Exception ex) { Program.LogError(ex.ToString()); }
+    }
     public void RequestReset() => Interlocked.Exchange(ref _resetRequested, 1);
     public string GetReport() => _computer.GetReport();
 
@@ -64,8 +80,14 @@ internal sealed class TemperatureMonitor : IDisposable
         }
         foreach (var category in new[] { "CPU", "GPU", "SSD/HDD" })
             if (!rows.Any(r => r.Category == category))
-                rows.Add(new($"missing/{category}", category, "장치가 감지되지 않았습니다", "—",
+            {
+                if (category == "SSD/HDD" && _storageInventory.Count > 0)
+                    foreach (var model in _storageInventory)
+                        rows.Add(new($"unsupported-storage/{model}", category, model, "온도 센서 접근 불가",
+                            null, null, null, "SMART 미지원 / 권한 확인"));
+                else rows.Add(new($"missing/{category}", category, "장치가 감지되지 않았습니다", "—",
                     null, null, null, "장치 없음 / 권한 확인"));
+            }
         return new(DateTimeOffset.Now, ++_sequence, _historyStart, rows, errors);
     }
 
@@ -75,12 +97,15 @@ internal sealed class TemperatureMonitor : IDisposable
         string? updateError = null;
         try { hardware.Update(); }
         catch (Exception ex) { updateError = ex.Message; errors.Add($"{device}: {ex.Message}"); }
-        foreach (var sensor in hardware.Sensors.Where(s => s.SensorType == SensorType.Temperature))
+        foreach (var sensor in hardware.Sensors.Where(s => s.SensorType == SensorType.Temperature
+            && !s.Name.Contains("Distance to TjMax", StringComparison.OrdinalIgnoreCase)))
         {
             var id = sensor.Identifier.ToString();
-            var values = _history.Observe(id, updateError is null ? sensor.Value : null);
+            // AMD ADL reports zero for unsupported auxiliary thermal sensors on some GPUs.
+            var unsupportedZero = hardware.HardwareType == HardwareType.GpuAmd && sensor.Value == 0;
+            var values = _history.Observe(id, updateError is null && !unsupportedZero ? sensor.Value : null);
             rows.Add(new(id, category, device, sensor.Name, values.Current, values.Min, values.Max,
-                updateError is not null ? "읽기 오류" : values.Current.HasValue ? "정상" : "값 없음 / 권한 확인"));
+                updateError is not null ? "읽기 오류" : unsupportedZero ? "미지원 (드라이버 0 반환)" : values.Current.HasValue ? "정상" : "값 없음 / 권한 확인"));
         }
         foreach (var subHardware in hardware.SubHardware)
             ReadHardware(subHardware, category, device, rows, errors);

@@ -20,7 +20,6 @@ internal static class SelfTest
             history.Reset();
             Check(history.Observe("cpu", null) == (null, null, null), "초기화 후 기록 제거", results);
             Check(history.Observe("cpu", 49) == (49f, 49f, 49f), "초기화 후 새 측정부터 기록", results);
-            Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "artifacts"));
             // Use working directory because a single-file app's base may be its extraction directory.
             Directory.CreateDirectory("artifacts");
             File.WriteAllText("artifacts/self-test.json", JsonSerializer.Serialize(new { Passed = true, Checks = results }, Program.JsonOptions));

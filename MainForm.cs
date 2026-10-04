@@ -9,22 +9,37 @@ namespace SoyTemperature;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Color BackgroundColor = Color.FromArgb(16, 23, 35);
-    private static readonly Color PanelColor = Color.FromArgb(25, 35, 50);
-    private static readonly Color TextColor = Color.FromArgb(232, 239, 249);
-    private static readonly Color MutedColor = Color.FromArgb(158, 177, 199);
-    private static readonly Color AccentColor = Color.FromArgb(83, 217, 192);
+    private static readonly Color BackgroundColor = Color.FromArgb(245, 245, 247);
+    private static readonly Color PanelColor = Color.White;
+    private static readonly Color TextColor = Color.FromArgb(29, 29, 31);
+    private static readonly Color MutedColor = Color.FromArgb(110, 110, 115);
+    private static readonly Color AccentColor = Color.FromArgb(0, 113, 227);
     private readonly CancellationTokenSource _stop = new();
     private readonly TemperatureMonitor _monitor = new();
     private readonly DataGridView _grid = new();
     private readonly Label _status = new();
     private readonly Label _hint = new();
-    private readonly Label _history = new();
-    private readonly Dictionary<string, (Label Value, Label Detail)> _cards = new();
+    private readonly Dictionary<string, (Label Value, Label Device, Label Range, Label Detail)> _cards = new();
+    private readonly CheckBox _details = new();
+    private readonly ContextMenuStrip _moreMenu = new();
+    private readonly ToolTip _toolTip = new();
+    private TableLayoutPanel _root = null!;
     private readonly string? _verifyDirectory;
     private readonly int _verifySamples;
     private readonly bool _verifyExit;
     private readonly List<MonitorSnapshot> _samples = new();
+    private readonly ContextMenuStrip _trayMenu = new();
+    private readonly TrayTemperature _cpuTray;
+    private readonly TrayTemperature _gpuTray;
+    private readonly ToolStripMenuItem _cpuTrayText = new("CPU: 측정 대기") { Enabled = false };
+    private readonly ToolStripMenuItem _gpuTrayText = new("GPU: 측정 대기") { Enabled = false };
+    private bool _exitRequested;
+    private bool _trayMode;
+    private bool _trayVerified;
+    private bool _restoreVerified;
+    private bool _resetVerified;
+    private bool _detailsVerified;
+    private DateTimeOffset? _historyBeforeReset;
     private Task? _worker;
     private MonitorSnapshot? _latest;
     private bool _closing;
@@ -34,46 +49,54 @@ internal sealed class MainForm : Form
     public MainForm(string[] args)
     {
         _verifyDirectory = ArgumentValue(args, "--verify");
-        _verifySamples = int.TryParse(ArgumentValue(args, "--verify-samples"), out var count) ? Math.Max(2, count) : 6;
+        _verifySamples = int.TryParse(ArgumentValue(args, "--verify-samples"), out var count) ? Math.Max(6, count) : 6;
         _verifyExit = args.Contains("--verify-exit");
         if (_verifyDirectory is not null) Directory.CreateDirectory(_verifyDirectory);
         Text = "SOY Temperature · CPU / GPU / SSD·HDD";
-        Font = new Font("맑은 고딕", 10);
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Font = new Font(SelectFont(), 10);
         BackColor = BackgroundColor;
         ForeColor = TextColor;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(1120, 760);
-        MinimumSize = new Size(900, 640);
-        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(900, 490);
+        MinimumSize = new Size(900, 490);
         DoubleBuffered = true;
         BuildLayout();
+        _trayMenu.Items.Add("창 열기", null, (_, _) => RestoreWindow());
+        _trayMenu.Items.AddRange([_cpuTrayText, _gpuTrayText, new ToolStripSeparator()]);
+        _trayMenu.Items.Add("최저·최고 초기화", null, (_, _) => _monitor.RequestReset());
+        _trayMenu.Items.Add("종료", null, (_, _) => { _exitRequested = true; Close(); });
+        _cpuTray = new TrayTemperature("CPU", Color.FromArgb(83, 217, 192), _trayMenu, RestoreWindow);
+        _gpuTray = new TrayTemperature("GPU", Color.FromArgb(154, 182, 255), _trayMenu, RestoreWindow);
+        Icon = SystemIcons.Application;
         Shown += (_, _) => _worker = Task.Run(MonitorLoopAsync);
+        Resize += (_, _) => { if (WindowState == FormWindowState.Minimized && !_closing) MinimizeToTray(); };
         FormClosing += OnClosing;
     }
 
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(26), ColumnCount = 1, RowCount = 7 };
-        foreach (var height in new[] { 62f, 46f, 135f, 53f }) root.RowStyles.Add(new(SizeType.Absolute, height));
+        var root = _root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, RowCount = 6 };
+        foreach (var height in new[] { 64f, 38f, 230f, 55f }) root.RowStyles.Add(new(SizeType.Absolute, height));
         root.RowStyles.Add(new(SizeType.Percent, 100));
-        root.RowStyles.Add(new(SizeType.Absolute, 48));
-        root.RowStyles.Add(new(SizeType.Absolute, 30));
+        root.RowStyles.Add(new(SizeType.Absolute, 40));
         Controls.Add(root);
 
         var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
-        heading.ColumnStyles.Add(new(SizeType.Percent, 65));
-        heading.ColumnStyles.Add(new(SizeType.Percent, 35));
-        heading.Controls.Add(MakeLabel("SOY  /  TEMPERATURE", 23, TextColor, FontStyle.Bold), 0, 0);
-        heading.Controls.Add(new Label { Text = "LIVE  ·  2초 간격", ForeColor = AccentColor, Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleRight, Font = new Font(Font.FontFamily, 11, FontStyle.Bold) }, 1, 0);
+        heading.ColumnStyles.Add(new(SizeType.Percent, 70));
+        heading.ColumnStyles.Add(new(SizeType.Percent, 30));
+        heading.Controls.Add(MakeLabel("SOY Temperature", 24, TextColor, FontStyle.Bold), 0, 0);
+        heading.Controls.Add(new Label { Text = "●  2초마다 업데이트", ForeColor = Color.FromArgb(45, 135, 80), Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleRight, Font = new Font(Font.FontFamily, 10) }, 1, 0);
         root.Controls.Add(heading, 0, 0);
 
         _hint.Dock = DockStyle.Fill;
         _hint.TextAlign = ContentAlignment.MiddleLeft;
-        _hint.ForeColor = Program.IsAdministrator ? AccentColor : Color.FromArgb(241, 196, 109);
+        _hint.ForeColor = MutedColor;
         _hint.Text = Program.IsAdministrator
-            ? "관리자 모드  ·  CPU / GPU / 저장장치의 온도 센서를 읽습니다."
-            : "일반 권한  ·  일부 센서가 보이지 않으면 ‘관리자 실행’을 누르세요.";
+            ? "컴퓨터의 온도를 한눈에."
+            : "CPU 온도를 보려면 ‘더 보기 → 관리자 실행’을 선택하세요.";
         root.Controls.Add(_hint, 0, 1);
 
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Margin = Padding.Empty };
@@ -81,33 +104,53 @@ internal sealed class MainForm : Form
         for (var i = 0; i < 3; i++)
         {
             cards.ColumnStyles.Add(new(SizeType.Percent, 100f / 3));
-            var card = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = PanelColor,
-                Margin = new Padding(i == 0 ? 0 : 8, 5, i == 2 ? 0 : 8, 5), Padding = new Padding(18, 8, 12, 8), RowCount = 3 };
-            card.RowStyles.Add(new(SizeType.Absolute, 25));
+            var container = new RoundedPanel { Dock = DockStyle.Fill, BackColor = BackgroundColor,
+                Margin = new Padding(i == 0 ? 0 : 7, 4, i == 2 ? 0 : 7, 4), Padding = new Padding(20, 16, 16, 16) };
+            var card = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, RowCount = 5, ColumnCount = 1, Margin = Padding.Empty };
+            foreach (var height in new[] { 28f, 39f, 80f, 29f }) card.RowStyles.Add(new(SizeType.Absolute, height));
             card.RowStyles.Add(new(SizeType.Percent, 100));
-            card.RowStyles.Add(new(SizeType.Absolute, 25));
-            card.Controls.Add(MakeLabel(categories[i], 10, MutedColor, FontStyle.Bold), 0, 0);
-            var value = MakeLabel("— °C", 29, AccentColor, FontStyle.Bold);
-            var detail = MakeLabel("센서 검색 중…", 9, MutedColor);
-            card.Controls.Add(value, 0, 1);
-            card.Controls.Add(detail, 0, 2);
-            _cards[categories[i]] = (value, detail);
-            cards.Controls.Add(card, i, 0);
+            card.Controls.Add(MakeLabel(categories[i], 12, TextColor, FontStyle.Bold), 0, 0);
+            var device = MakeLabel("검색 중…", 9.5f, MutedColor);
+            var value = MakeLabel("—°", 40, TextColor, FontStyle.Regular);
+            var range = MakeLabel("최저 —   최고 —", 10, MutedColor);
+            var detail = MakeLabel("섭씨 °C", 9, MutedColor);
+            card.Controls.Add(device, 0, 1);
+            card.Controls.Add(value, 0, 2);
+            card.Controls.Add(range, 0, 3);
+            card.Controls.Add(detail, 0, 4);
+            container.Controls.Add(card);
+            _cards[categories[i]] = (value, device, range, detail);
+            cards.Controls.Add(container, i, 0);
         }
         root.Controls.Add(cards, 0, 2);
 
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 9, 0, 0) };
-        var reset = MakeButton("최저·최고 초기화");
+        var reset = MakeButton("기록 초기화");
         reset.Click += (_, _) => { _monitor.RequestReset(); _status.Text = "기록 초기화 요청됨 · 다음 측정부터 새로 기록합니다."; };
-        var export = MakeButton("CSV 저장");
-        export.Click += (_, _) => ExportCsv();
-        var admin = MakeButton(Program.IsAdministrator ? "관리자 모드 사용 중" : "관리자 실행");
+        _details.Text = "센서 상세";
+        _details.AutoSize = true;
+        _details.Margin = new Padding(14, 9, 20, 0);
+        _details.CheckedChanged += (_, _) =>
+        {
+            _grid.Visible = _details.Checked;
+            var scale = DeviceDpi / 96f;
+            ClientSize = new Size((int)(900 * scale), (int)((_details.Checked ? 770 : 490) * scale));
+            if (_latest is not null && _details.Checked) UpdateGrid(_latest);
+        };
+        var tray = MakeButton("트레이로 내리기");
+        tray.Click += (_, _) => MinimizeToTray();
+        var more = MakeButton("더 보기  ···");
+        more.Click += (_, _) => _moreMenu.Show(more, new Point(0, more.Height));
+        _moreMenu.Items.Add("CSV 저장", null, (_, _) => ExportCsv());
+        var admin = _moreMenu.Items.Add("관리자 실행", null, (_, _) => RestartAsAdministrator());
         admin.Enabled = !Program.IsAdministrator;
-        admin.Click += (_, _) => RestartAsAdministrator();
-        toolbar.Controls.AddRange([reset, export, admin]);
+        _moreMenu.Items.Add(new ToolStripSeparator());
+        _moreMenu.Items.Add("종료", null, (_, _) => { _exitRequested = true; Close(); });
+        toolbar.Controls.AddRange([reset, _details, tray, more]);
         root.Controls.Add(toolbar, 0, 3);
 
         _grid.Dock = DockStyle.Fill;
+        _grid.Visible = false;
         _grid.BackgroundColor = PanelColor;
         _grid.BorderStyle = BorderStyle.None;
         _grid.ReadOnly = true;
@@ -121,12 +164,12 @@ internal sealed class MainForm : Form
         _grid.EnableHeadersVisualStyles = false;
         _grid.ColumnHeadersHeight = 40;
         _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        _grid.ColumnHeadersDefaultCellStyle = new() { BackColor = Color.FromArgb(35, 48, 67), ForeColor = TextColor,
-            Font = new Font(Font.FontFamily, 10, FontStyle.Bold), SelectionBackColor = Color.FromArgb(35, 48, 67) };
+        _grid.ColumnHeadersDefaultCellStyle = new() { BackColor = BackgroundColor, ForeColor = MutedColor,
+            Font = new Font(Font.FontFamily, 9, FontStyle.Bold), SelectionBackColor = BackgroundColor };
         _grid.DefaultCellStyle = new() { BackColor = PanelColor, ForeColor = TextColor,
-            SelectionBackColor = Color.FromArgb(43, 65, 87), SelectionForeColor = TextColor, Padding = new Padding(7, 0, 7, 0) };
-        _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(29, 40, 56);
-        _grid.GridColor = Color.FromArgb(43, 55, 73);
+            SelectionBackColor = Color.FromArgb(225, 237, 252), SelectionForeColor = TextColor, Padding = new Padding(5, 0, 5, 0) };
+        _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 252);
+        _grid.GridColor = Color.FromArgb(230, 230, 234);
         _grid.RowTemplate.Height = 34;
         string[] names = ["분류", "장치", "센서", "현재 °C", "최저 °C", "최고 °C", "상태"];
         int[] widths = [65, 260, 165, 85, 85, 85, 155];
@@ -141,14 +184,9 @@ internal sealed class MainForm : Form
         _status.Dock = DockStyle.Fill;
         _status.TextAlign = ContentAlignment.MiddleLeft;
         _status.ForeColor = MutedColor;
-        _status.Text = "LibreHardwareMonitor로 센서를 검색하고 있습니다…";
+        _status.Font = new Font(Font.FontFamily, 9);
+        _status.Text = "센서를 찾고 있습니다…";
         root.Controls.Add(_status, 0, 5);
-        _history.Dock = DockStyle.Fill;
-        _history.TextAlign = ContentAlignment.MiddleLeft;
-        _history.ForeColor = MutedColor;
-        _history.Font = new Font(Font.FontFamily, 9);
-        _history.Text = "최저·최고: 실행 후 관측값  ·  상단: 분류별 가장 높은 현재 온도  ·  단위: 섭씨";
-        root.Controls.Add(_history, 0, 6);
     }
 
     private Label MakeLabel(string text, float size, Color color, FontStyle style = FontStyle.Regular) => new()
@@ -191,12 +229,17 @@ internal sealed class MainForm : Form
                     {
                         File.WriteAllText(Path.Combine(_verifyDirectory, "failure.txt"), ex.ToString());
                         Environment.ExitCode = 1;
-                        if (_verifyExit) Close();
+                        if (_verifyExit) { _exitRequested = true; Close(); }
                     }
                 });
         }
         finally
         {
+            if (_verifyDirectory is not null)
+            {
+                try { File.WriteAllText(Path.Combine(_verifyDirectory, "hardware-report.txt"), _monitor.GetReport()); }
+                catch (Exception ex) { Program.LogError(ex.ToString()); }
+            }
             try { _monitor.Dispose(); }
             catch (Exception ex) { Program.LogError(ex.ToString()); }
         }
@@ -206,6 +249,35 @@ internal sealed class MainForm : Form
     {
         if (_closing) return;
         _latest = snapshot;
+        var cpu = SummaryTemperature(snapshot, "CPU");
+        var gpu = SummaryTemperature(snapshot, "GPU");
+        _cpuTray.Update(cpu);
+        _gpuTray.Update(gpu);
+        _cpuTrayText.Text = $"CPU: {Format(cpu)} °C";
+        _gpuTrayText.Text = $"GPU: {Format(gpu)} °C";
+        // Sensor sampling continues while hidden. Avoid rebuilding the grid in tray mode.
+        if (!_trayMode) UpdateWindow(snapshot);
+        RecordVerification(snapshot);
+    }
+
+    private void UpdateWindow(MonitorSnapshot snapshot)
+    {
+        if (_details.Checked) UpdateGrid(snapshot);
+        foreach (var (category, labels) in _cards)
+        {
+            var row = SummaryRow(snapshot, category);
+            labels.Value.Text = row?.Current is float current ? $"{current:F1}°" : "—°";
+            labels.Device.Text = row?.Device ?? "장치 없음";
+            _toolTip.SetToolTip(labels.Device, row?.Device);
+            labels.Range.Text = $"최저 {Format(row?.Minimum)}°   최고 {Format(row?.Maximum)}°";
+            labels.Detail.Text = row?.Current is not null ? $"{row.Sensor} · °C" : category == "SSD/HDD" ? "온도 정보 미제공" : "관리자 권한 / 드라이버 확인";
+        }
+        _status.Text = $"{snapshot.Timestamp:HH:mm:ss} 업데이트  ·  기록 시작 {snapshot.HistoryStart:HH:mm:ss}"
+            + (snapshot.Errors.Count > 0 ? $"  ·  읽기 오류 {snapshot.Errors.Count}개" : "");
+    }
+
+    private void UpdateGrid(MonitorSnapshot snapshot)
+    {
         var selectedId = _grid.SelectedRows.Count > 0 ? _grid.SelectedRows[0].Tag as string : null;
         var firstRow = _grid.FirstDisplayedScrollingRowIndex;
         _grid.Rows.Clear();
@@ -217,20 +289,37 @@ internal sealed class MainForm : Form
             if (selectedId == row.Id) _grid.Rows[index].Selected = true;
         }
         if (firstRow >= 0 && firstRow < _grid.Rows.Count) _grid.FirstDisplayedScrollingRowIndex = firstRow;
-        foreach (var (category, labels) in _cards)
-        {
-            var live = snapshot.Rows.Where(r => r.Category == category && r.Current.HasValue).ToList();
-            labels.Value.Text = live.Count == 0 ? "— °C" : $"{live.Max(r => r.Current):F1} °C";
-            labels.Detail.Text = live.Count == 0 ? "측정값 없음 · 권한 / 지원 확인" : $"{live.Count}개 센서 · 현재 온도 중 최고";
-        }
-        var valid = snapshot.Rows.Count(r => r.Current.HasValue);
-        _status.Text = $"●  {snapshot.Timestamp:HH:mm:ss} 갱신  ·  #{snapshot.Sequence}  ·  온도 센서 {valid}개  ·  2초 간격"
-            + (snapshot.Errors.Count > 0 ? $"  ·  읽기 오류 {snapshot.Errors.Count}개" : "");
-        _history.Text = $"기록 시작 {snapshot.HistoryStart:HH:mm:ss}  ·  최저·최고: 관측값  ·  상단: 분류별 가장 높은 현재 온도";
+    }
+
+    private void RecordVerification(MonitorSnapshot snapshot)
+    {
         if (_verifyDirectory is not null && !_verificationFinished)
         {
             _samples.Add(snapshot);
             File.AppendAllText(Path.Combine(_verifyDirectory, "samples.jsonl"), JsonSerializer.Serialize(snapshot) + Environment.NewLine);
+            if (_samples.Count == 2)
+            {
+                MinimizeToTray();
+                _trayVerified = !Visible && !ShowInTaskbar && _cpuTray.Visible && _gpuTray.Visible;
+                _cpuTray.SavePreview(Path.Combine(_verifyDirectory, "cpu-tray.png"));
+                _gpuTray.SavePreview(Path.Combine(_verifyDirectory, "gpu-tray.png"));
+            }
+            if (_samples.Count == 3)
+            {
+                RestoreWindow();
+                _restoreVerified = Visible && ShowInTaskbar && !_cpuTray.Visible && !_gpuTray.Visible;
+                _historyBeforeReset = snapshot.HistoryStart;
+                _monitor.RequestReset();
+            }
+            if (_samples.Count == 4)
+                _resetVerified = snapshot.HistoryStart > _historyBeforeReset
+                    && snapshot.Rows.All(r => !r.Current.HasValue || (r.Current == r.Minimum && r.Current == r.Maximum));
+            if (_samples.Count == 5)
+            {
+                _details.Checked = true;
+                _detailsVerified = _grid.Visible && _grid.Rows.Count == snapshot.Rows.Count;
+                _details.Checked = false;
+            }
             if (_samples.Count >= _verifySamples) FinishVerification();
         }
     }
@@ -257,13 +346,27 @@ internal sealed class MainForm : Form
             ActualIntervalsMilliseconds = intervals,
             UiRowCount = _grid.Rows.Count,
             UiVisible = Visible,
+            Dpi = DeviceDpi,
+            WindowSize = new { Width, Height },
+            AutoScale = new { AutoScaleDimensions.Width, AutoScaleDimensions.Height },
+            TrayMinimizePassed = _trayVerified,
+            TrayRestorePassed = _restoreVerified,
+            HistoryResetPassed = _resetVerified,
+            SensorDetailsPassed = _detailsVerified,
+            FontFamily = Font.FontFamily.Name,
+            CpuTrayText = _cpuTray.Text,
+            GpuTrayText = _gpuTray.Text,
+            PawnIoInstalled = LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled,
+            PawnIoVersion = LibreHardwareMonitor.PawnIo.PawnIo.Version.ToString(),
+            WorkingSetBytes = Process.GetCurrentProcess().WorkingSet64,
             FinalSnapshot = _latest,
             ValidTemperatureCount = _latest!.Rows.Count(r => r.Current.HasValue),
             Notes = "window.png is a DrawToBitmap capture of the running WinForms window. Missing sensors are reported without simulated values."
         };
         File.WriteAllText(Path.Combine(_verifyDirectory!, "verification.json"), JsonSerializer.Serialize(report, Program.JsonOptions));
         // Hardware report is produced on its owning worker after the UI callback returns.
-        if (_verifyExit) Close();
+        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_detailsVerified) Environment.ExitCode = 1;
+        if (_verifyExit) { _exitRequested = true; Close(); }
     }
 
     private void ExportCsv()
@@ -288,6 +391,7 @@ internal sealed class MainForm : Form
         try
         {
             Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas" });
+            _exitRequested = true;
             Close();
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { _status.Text = "관리자 실행이 취소되었습니다. 현재 모드로 계속 측정합니다."; }
@@ -298,14 +402,64 @@ internal sealed class MainForm : Form
     {
         if (_canClose) return;
         e.Cancel = true;
+        if (!_exitRequested && e.CloseReason == CloseReason.UserClosing)
+        {
+            MinimizeToTray();
+            return;
+        }
         if (_closing) return;
         _closing = true;
         _status.Text = "모니터와 센서 연결을 종료하고 있습니다…";
         _stop.Cancel();
         if (_worker is not null) await _worker;
+        _cpuTray.Dispose();
+        _gpuTray.Dispose();
+        _trayMenu.Dispose();
+        _moreMenu.Dispose();
+        _toolTip.Dispose();
         _stop.Dispose();
         _canClose = true;
         Close();
+    }
+
+    private void MinimizeToTray()
+    {
+        _trayMode = true;
+        _cpuTray.Visible = true;
+        _gpuTray.Visible = true;
+        ShowInTaskbar = false;
+        Hide();
+    }
+
+    private void RestoreWindow()
+    {
+        _trayMode = false;
+        ShowInTaskbar = true;
+        Show();
+        WindowState = FormWindowState.Normal;
+        if (_latest is not null) UpdateWindow(_latest);
+        _cpuTray.Visible = false;
+        _gpuTray.Visible = false;
+        Activate();
+    }
+
+    private static float? SummaryTemperature(MonitorSnapshot snapshot, string category)
+        => SummaryRow(snapshot, category)?.Current;
+
+    private static TemperatureRow? SummaryRow(MonitorSnapshot snapshot, string category) => snapshot.Rows
+        .Where(r => r.Category == category).GroupBy(r => r.Device)
+        .Select(group => group.OrderBy(r => !r.Current.HasValue).ThenBy(r => r.Sensor switch
+        {
+            "CPU Package" or "GPU Core" or "Temperature" or "Composite" => 0,
+            "Core Max" => 1,
+            _ => 2
+        }).First()).OrderByDescending(r => r.Current).FirstOrDefault();
+
+    private static string SelectFont()
+    {
+        var installed = FontFamily.Families.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return new[] { "SF Pro Display", "SF Pro Text", "SF Pro", "Segoe UI Variable", "Segoe UI" }
+            .FirstOrDefault(installed.Contains) ?? "맑은 고딕";
     }
 
     private static string Format(float? value) => value?.ToString("F1") ?? "—";
