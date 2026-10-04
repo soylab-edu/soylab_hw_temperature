@@ -17,7 +17,7 @@
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>embedded</DebugType>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Product>SOY Temperature</Product>
     <Description>CPU, GPU, SSD/HDD temperature monitor</Description>
   </PropertyGroup>
@@ -26,5 +26,8 @@
     <Compile Remove="vendor/**/*.cs;tests/**/*.cs;.tools/**/*.cs;artifacts/**/*.cs;dist/**/*.cs;1.0.0/**/*.cs" />
     <None Remove="vendor/**/*;.tools/**/*;artifacts/**/*;dist/**/*;1.0.0/**/*" />
     <EmbeddedResource Include="img\SoyTemperature.ico" LogicalName="SoyTemperature.AppIcon" />
+    <EmbeddedResource Include="Resources\Fonts\Ubuntu-Bold.ttf" LogicalName="SoyTemperature.UbuntuBold" />
+    <EmbeddedResource Include="licenses\Ubuntu-UFL.txt" LogicalName="SoyTemperature.UbuntuLicense" />
+    <EmbeddedResource Include="licenses\Ubuntu-COPYRIGHT.txt" LogicalName="SoyTemperature.UbuntuCopyright" />
   </ItemGroup>
 </Project>

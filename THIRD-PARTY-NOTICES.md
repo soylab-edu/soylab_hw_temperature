@@ -5,4 +5,6 @@
 - NuGet dependencies and exact versions are recorded in `packages.lock.json`. Upstream LibreHardwareMonitor notices describe additional components.
 - PawnIO 2.2.0 is downloaded directly from https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0 only when the user selects driver installation. The installer is not redistributed by this repository or executable. Driver source and GPL-2.0 license: https://github.com/namazso/PawnIO. Installer source: https://github.com/namazso/PawnIO.Setup.
 
-The palette is taken from the user's SOYLAB Comfy Router project: https://github.com/soylab-edu/ComfyUI-soylab-router/blob/ffda499/web/router.js. SF Pro is selected only when already installed; no Apple font files are redistributed.
+- Ubuntu Bold: unmodified font from https://github.com/google/fonts/tree/main/ufl/ubuntu, copyright Canonical Ltd., Ubuntu Font Licence 1.0. Font, copyright and license are embedded in the executable. View the license from the app/tray context menu → 글꼴 라이선스. Original notices are also in `licenses/Ubuntu-COPYRIGHT.txt` and `licenses/Ubuntu-UFL.txt`.
+
+The palette is taken from the user's SOYLAB Comfy Router project: https://github.com/soylab-edu/ComfyUI-soylab-router/blob/ffda499/web/router.js.
