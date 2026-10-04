@@ -4,6 +4,38 @@ namespace SoyTemperature;
 
 internal enum WindowAction { Close, Minimize, Website }
 
+internal sealed class StartupFlagButton : Button
+{
+    private bool _isOn;
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool IsOn { get => _isOn; set { _isOn = value; Invalidate(); } }
+    public float FlagHeight => IsOn ? 5 : 12;
+    public StartupFlagButton()
+    {
+        AccessibleName = "로그인 시 자동 실행";
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        Cursor = Cursors.Hand;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.Clear(Theme.Background);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        var scale = Math.Min(Width, Height) / 28f;
+        e.Graphics.ScaleTransform(scale, scale);
+        var color = !Enabled ? Theme.Border : IsOn ? Theme.Lavender : Theme.Muted;
+        using var pen = new Pen(color, 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        e.Graphics.DrawLine(pen, 7, 4, 7, 24);
+        var top = FlagHeight;
+        PointF[] flag = [new(7, top), new(14, top + 1), new(21, top), new(21, top + 8), new(14, top + 9), new(7, top + 8)];
+        using var fill = new SolidBrush(Color.FromArgb(IsOn ? 90 : 25, color));
+        e.Graphics.FillPolygon(fill, flag);
+        e.Graphics.DrawPolygon(pen, flag);
+        if (Focused) e.Graphics.DrawLine(pen, 5, 26, 23, 26);
+    }
+}
+
 internal sealed class TrafficLightButton : Button
 {
     private readonly WindowAction _action;

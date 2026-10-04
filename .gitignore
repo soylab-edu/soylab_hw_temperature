@@ -4,6 +4,9 @@ obj/
 vendor/
 artifacts/
 dist/
-1.0.0/
+/1.0.0/
+release/**/*.exe
+release/**/*.zip
+SoyTemperature-win-x64.zip
 *.user
 Resources/PawnIO_setup.exe

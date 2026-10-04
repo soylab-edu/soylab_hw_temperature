@@ -1,41 +1,88 @@
 # SOY Temperature
 
-Windows 10/11 x64용 C# WinForms 온도 모니터. LibreHardwareMonitorLib 0.9.6으로 CPU·GPU 온도를 2초마다 읽습니다.
+**생생하게 PC의 온도를 체크합니다.**
 
-## 실행
+현재는 **Windows 10/11 · x64**에서 사용할 수 있습니다. CPU·GPU 온도를 2초마다 확인하는 작은 데스크톱 모니터입니다.
 
-[최신 배포 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest)에서 exe를 직접 받거나 ZIP의 `1.0.0` 폴더를 풀어 실행하세요. 로컬 최종 배포 파일은 `1.0.0/SoyTemperature.exe`입니다. 폴더에는 exe 하나만 있으며 .NET 런타임·아이콘·글꼴이 모두 포함되어 있습니다.
+## 다운로드
 
-- exe를 더블클릭하면 Windows 관리자 승인(UAC)을 요청합니다. **예**를 누르면 CPU 센서에 필요한 권한으로 시작합니다.
-- 화면에는 **CPU·GPU 현재 온도, 숫자 위의 작은 그래프와 좌상단의 원형 버튼 세 개**만 표시됩니다. SSD와 기본 창 제목 표시줄, 장치명과 안내 문구는 삭제했습니다.
-- 둥근 카드와 창 모서리, 짙은 보라색 배경, 넓은 여백과 **Ubuntu Bold** 숫자를 사용합니다. 글꼴은 exe에 내장되며 창 크기와 DPI에 맞춰 크기를 조절합니다.
-- 창 외곽에는 밝은 보라색 `#A779E6`의 굵은 테두리(논리 3.5 px)를 적용했습니다. DPI와 창 크기를 바꿔도 둥근 외곽선이 유지됩니다.
-- CPU는 따뜻한 보라색 카드와 코랄 그래프, GPU는 차가운 보라색 카드와 라벤더 그래프입니다. 그래프는 실제 측정한 최근 60초(최대 30개 표본)를 표시하며, 트레이에서도 기록을 이어갑니다. 미지원 값은 연결하지 않습니다.
-- 좌상단 버튼은 왼쪽부터 **빨강: 앱 종료**, **노랑: 트레이로 숨기기**, **초록: https://soylab.ai/ 열기**입니다. 초록 버튼은 기본 브라우저로 사이트를 엽니다. 버튼에 마우스를 올리면 아이콘과 기능 안내가 표시됩니다.
-- CPU·GPU 트레이 아이콘은 온도 숫자와 C/G를 표시합니다. 클릭하면 창이 돌아옵니다. 우클릭 → 종료로도 앱을 끝낼 수 있습니다.
-- 카드나 여백을 드래그해 창을 이동하고, 창 가장자리를 드래그해 크기를 조절하세요. Alt+F4는 앱을 종료합니다.
-- 바깥 테두리와 오른쪽 아래의 작은 대각선 손잡이를 드래그하면 창을 줄이거나 늘릴 수 있습니다. 둥근 모서리에서는 대각선 크기 조절 커서가 표시됩니다. 최소 크기는 논리 260×180 px이며, 온도·그래프·좌상단 버튼이 함께 맞춰집니다.
-- 창이나 트레이를 우클릭하면 최저·최고값 확인, 기록 초기화, CSV 저장, CPU 드라이버 설치와 종료를 사용할 수 있습니다. 최저·최고 기록은 화면에 노출하지 않고 내부에서 유지합니다.
-- 다른 PC에 PawnIO가 없다면 우클릭 → CPU 드라이버 설치를 선택하세요. 공식 PawnIO 2.2.0 설치 파일의 SHA-256을 확인하고 설치합니다. 설치에는 인터넷과 관리자 권한이 필요합니다.
-- Windows가 트레이 아이콘을 숨기면 작업 표시줄의 `^`에서 확인하세요.
+| 파일 | 링크 |
+| --- | --- |
+| 단일 실행 파일 | [SoyTemperature.exe 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature.exe) |
+| `release/1.0.0` 폴더 ZIP | [Windows 배포 ZIP 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature-win-x64.zip) |
+| 공개 소스 코드 | [소스 보기](https://github.com/soylab-edu/soylab_hw_temperature/tree/main) · [v1.0.7 소스 ZIP](https://github.com/soylab-edu/soylab_hw_temperature/archive/refs/tags/v1.0.7.zip) |
 
-대표 온도는 CPU Package와 GPU Core를 우선 선택합니다. 여러 장치가 있으면 대표 센서 중 현재 온도가 가장 높은 장치를 표시합니다. 실제 온도가 아닌 Distance to TjMax는 제외하고, AMD 미지원 보조 센서의 0을 실제 온도로 표시하지 않습니다.
+ZIP을 풀고 **`release/1.0.0/SoyTemperature.exe`**를 실행하세요. 실행 파일 하나에 .NET 런타임·아이콘·글꼴이 포함되어 있어 별도 .NET 설치가 필요 없습니다. 자동 실행에 사용할 고정된 위치에 보관하세요.
 
-SOYLAB Comfy Router의 짙은 보라색 배경과 코랄·라벤더·초록 포인트를 사용했습니다. SOYLAB 로고의 컬러 무늬와 중앙 온도계 아이콘을 exe·창·작업 표시줄에 적용했습니다. 원본 자산은 `img`, 제작 프롬프트는 [icon-design.md](img/icon-design.md)에 있습니다.
+## 아이콘
 
-## 빌드 및 검증
+<img src="img/screenshots/icon.png" alt="SOYLAB 컬러 패턴과 중앙의 커다란 온도계 아이콘" width="144" />
+
+SOYLAB 컬러 패턴과 커다란 온도계가 어우러진 아이콘입니다.
+
+## 인터페이스
+
+<img src="img/screenshots/interface.png" alt="실제로 실행한 CPU·GPU 온도 모니터 화면" width="780" />
+
+온도 숫자와 작은 그래프를 중심으로 구성했습니다. Ubuntu Bold 글꼴, 서로 다른 보라색 카드, 코랄·라벤더 그래프와 밝은 보라색 외곽선을 사용합니다. 이미지는 실제 PC에서 측정한 실행 화면이며, 온도는 사용 환경에 따라 달라집니다.
+
+| 조작 | 동작 |
+| --- | --- |
+| 좌상단 빨간 버튼 | 종료 |
+| 좌상단 노란 버튼 | 창을 숨기고 트레이에 CPU·GPU 온도 표시 |
+| 좌상단 초록 버튼 | [소이랩 홈페이지](https://soylab.ai/) 열기 |
+| 우상단 깃발 | **올라가면 로그인 시 자동 실행 ON**, 내려가면 OFF |
+| 카드·여백 드래그 | 창 이동 |
+| 가장자리·우하단 손잡이 드래그 | 창 크기 조절 |
+| 트레이 온도 클릭 / 바로가기 재실행 | 기존 창 열기 |
+| 창·트레이 우클릭 | 최저·최고 온도, 기록 초기화, CSV 저장, 드라이버 설치, 종료 |
+
+창 크기와 화면 배율에 맞춰 글자·카드가 조절됩니다. 최소 크기는 논리 260×180 px입니다.
+
+<img src="img/screenshots/interface-compact.png" alt="작게 줄인 실제 모니터 창" width="390" />
+
+트레이에서도 2초마다 측정하며 최근 60초 그래프와 최저·최고 기록을 이어갑니다.
+
+<img src="img/screenshots/cpu-tray.png" alt="CPU 온도 트레이 아이콘" width="40" /> <img src="img/screenshots/gpu-tray.png" alt="GPU 온도 트레이 아이콘" width="40" />
+
+## 자동 실행과 바로가기
+
+**우상단 깃발을 클릭하면** Windows 로그인 시 자동 실행을 켜거나 끌 수 있습니다. 올라간 깃발은 켜짐, 내려간 깃발은 꺼짐입니다. 켜면 현재 사용자용 예약 작업과 바탕 화면·시작 메뉴 바로가기를 만들고, 다음 로그인부터 창을 띄우지 않고 트레이로 시작합니다. CPU 센서에 필요한 관리자 권한으로 실행합니다.
+
+<img src="img/screenshots/startup-on.png" alt="우상단 깃발이 올라간 자동 실행 켜짐 상태" width="360" /> <img src="img/screenshots/startup-off.png" alt="우상단 깃발이 내려간 자동 실행 꺼짐 상태" width="360" />
+
+작업 표시줄에 고정하려면 바탕 화면의 **SOY Temperature** 바로가기를 우클릭해 **작업 표시줄에 고정**을 선택하세요. 같은 앱을 다시 실행하면 중복으로 뜨지 않고 기존 창이 열립니다.
+
+실행 파일 위치를 옮겼다면 새 위치에서 깃발을 다시 켜세요. 자동 실행을 끄더라도 지금 측정 중인 앱과 바로가기는 유지됩니다.
+
+명령줄에서도 설정할 수 있습니다. 추가 설치 파일 없이 exe에 기능이 포함되어 있습니다.
+
+```powershell
+Start-Process .\SoyTemperature.exe -ArgumentList '--install-startup' -Wait  # 자동 실행 + 바로가기
+Start-Process .\SoyTemperature.exe -ArgumentList '--remove-startup' -Wait   # 자동 실행 끄기
+Start-Process .\SoyTemperature.exe -ArgumentList '--tray'                  # 트레이로 시작
+```
+
+## CPU 온도가 보이지 않을 때
+
+실행할 때 Windows 관리자 승인 창에서 **예**를 누르세요. 다른 PC에 센서 드라이버가 없다면 우클릭 → **CPU 드라이버 설치**를 선택하세요. 공식 PawnIO 2.2.0 설치 파일의 SHA-256을 확인하고 설치합니다. 드라이버 설치에는 인터넷과 관리자 권한이 필요합니다. 하드웨어·드라이버에서 온도를 제공하지 않는 경우에는 `—`로 표시합니다.
+
+## 공개 소스와 빌드
+
+C# WinForms와 LibreHardwareMonitorLib 0.9.6을 사용합니다. 소스 코드와 빌드·배포 스크립트는 이 공개 저장소에 있습니다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 powershell -ExecutionPolicy Bypass -File .\launch.ps1
-Start-Process .\1.0.0\SoyTemperature.exe -ArgumentList '--self-test' -Wait
-Start-Process .\1.0.0\SoyTemperature.exe -ArgumentList '--verify C:\Temp\SoyVerification --verify-exit' -Wait
+powershell -ExecutionPolicy Bypass -File .\package-release.ps1
 ```
 
-빌드 스크립트는 SDK가 없으면 Microsoft 공식 설치 스크립트로 `.tools/dotnet`에 .NET 10 SDK를 설치합니다. 시스템 PATH는 변경하지 않습니다. 패키지 버전은 `packages.lock.json`에 기록합니다. PNG 변경 후 `export-icon.ps1`로 ICO를 갱신한 뒤 빌드하세요.
+SDK가 없다면 빌드 스크립트가 Microsoft 공식 설치 스크립트로 `.tools/dotnet`에 .NET 10 SDK를 설치합니다. 결과는 `release/1.0.0/SoyTemperature.exe`이며 ZIP에는 이 exe 하나만 넣습니다.
 
-`--self-test`는 센서별 최저·최고, null·NaN·무한대 제외와 초기화를 검증합니다. `--verify`는 실제 WinForms 창에서 6회 측정하고 CPU 센서, 트레이 숨기기/복원, 기록 초기화, 작은 창의 글자 맞춤, 가장자리 크기 조절과 Ubuntu 글꼴을 확인합니다. `verification.json`, `samples.jsonl`, `hardware-report.txt`와 실제 창·트레이 이미지를 저장합니다. 읽지 못하는 온도는 null이며 가상 데이터는 사용하지 않습니다.
+`--self-test`는 센서 기록·초기화를 검증합니다. `--tray --verify C:\Temp\SoyVerification --verify-exit`는 실제 측정, 트레이 시작·숨기기·복원, 작은 창 레이아웃과 크기 조절을 검증하고 캡처·보고서를 저장합니다. `--verify-startup-toggle`을 추가하면 실제 깃발 버튼을 두 번 눌러 설정을 바꾼 뒤 원래 설정으로 복구합니다. 오류 로그는 `%LOCALAPPDATA%/SoyTemperature/errors.log`에 있습니다.
 
-오류 로그: `%LOCALAPPDATA%/SoyTemperature/errors.log`.
+참조: [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor), [Microsoft 단일 파일 배포](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview), [Windows 예약 작업](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtaskprincipal), [Ubuntu 글꼴](https://design.ubuntu.com/font). 글꼴 라이선스는 앱 우클릭 메뉴와 [licenses](licenses)에서 볼 수 있습니다.
 
-참조: [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor), [Microsoft 단일 파일 배포](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview), [Ubuntu 글꼴](https://design.ubuntu.com/font), [디자인 색상](https://github.com/soylab-edu/ComfyUI-soylab-router/blob/main/web/router.js). 글꼴 라이선스는 우클릭 메뉴에서 볼 수 있습니다.
+---
+
+[소이랩 유튜브 채널](https://www.youtube.com/@soy_lab) · [생생정보통 채팅방](https://open.kakao.com/o/gs60FZgh) · [소이랩 홈페이지](https://soylab.ai/)

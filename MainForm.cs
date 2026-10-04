@@ -22,11 +22,19 @@ internal sealed class MainForm : Form
     private readonly ToolStripMenuItem _gpuText = new("GPU: —") { Enabled = false };
     private readonly WindowFrame _root = new();
     private readonly FlowLayoutPanel _windowControls = new();
+    private readonly TableLayoutPanel _header = new();
+    private readonly StartupFlagButton _startupFlag = new();
+    private readonly bool _verifyStartupToggle;
+    private Task? _startupChange;
+    private bool _startupToggleVerified;
     private readonly TrafficLightButton _closeButton = new(WindowAction.Close);
     private readonly TrafficLightButton _minimizeButton = new(WindowAction.Minimize);
     private readonly TrafficLightButton _websiteButton = new(WindowAction.Website);
     private const string SoylabWebsite = "https://soylab.ai/";
     private readonly bool _verifyWebsite;
+    private readonly bool _startInTray;
+    private bool _startupTrayVerified;
+    private bool _latestStartupLogged;
     private bool _websiteLaunchSucceeded;
     private readonly string? _verifyDirectory;
     private readonly bool _verifyExit;
@@ -41,6 +49,8 @@ internal sealed class MainForm : Form
     public MainForm(string[] args)
     {
         _verifyDirectory = ArgumentValue(args, "--verify");
+        _startInTray = args.Contains("--tray");
+        _verifyStartupToggle = args.Contains("--verify-startup-toggle");
         _verifyExit = args.Contains("--verify-exit");
         _verifyWebsite = args.Contains("--verify-website");
         _verifySamples = int.TryParse(ArgumentValue(args, "--verify-samples"), out var count) ? Math.Max(6, count) : 6;
@@ -73,11 +83,13 @@ internal sealed class MainForm : Form
         _cpuTray = new TrayTemperature("CPU", Theme.Coral, _menu, RestoreWindow);
         _gpuTray = new TrayTemperature("GPU", Theme.Lavender, _menu, RestoreWindow);
         BuildLayout();
+        RefreshStartupFlag();
         Shown += (_, _) =>
         {
             var area = Screen.FromControl(this).WorkingArea;
             Size = new Size(Math.Min(Width, (int)(area.Width * .9)), Math.Min(Height, (int)(area.Height * .9)));
             UpdateResponsiveLayout();
+            if (_startInTray) MinimizeToTray();
             _worker = Task.Run(MonitorLoopAsync);
         };
         Resize += (_, _) =>
@@ -99,6 +111,14 @@ internal sealed class MainForm : Form
         _root.MouseDown += DragWindow;
         _root.MouseMove += UpdateResizeCursor;
         _root.MouseLeave += (_, _) => _root.Cursor = Cursors.Default;
+        _header.Dock = DockStyle.Fill;
+        _header.Margin = Padding.Empty;
+        _header.ColumnCount = 2;
+        _header.RowCount = 1;
+        _header.ColumnStyles.Add(new(SizeType.Percent, 100));
+        _header.ColumnStyles.Add(new(SizeType.Absolute, S(34)));
+        _header.MouseDown += DragWindow;
+        _header.MouseMove += UpdateResizeCursor;
         _windowControls.Dock = DockStyle.Fill;
         _windowControls.Margin = Padding.Empty;
         _windowControls.WrapContents = false;
@@ -113,7 +133,12 @@ internal sealed class MainForm : Form
             _toolTip.SetToolTip(button, button.AccessibleName);
             _windowControls.Controls.Add(button);
         }
-        _root.Controls.Add(_windowControls, 0, 0);
+        _startupFlag.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _startupFlag.Margin = Padding.Empty;
+        _startupFlag.Click += (_, _) => _startupChange = ToggleStartupAsync();
+        _header.Controls.Add(_windowControls, 0, 0);
+        _header.Controls.Add(_startupFlag, 1, 0);
+        _root.Controls.Add(_header, 0, 0);
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         cards.MouseDown += DragWindow;
         cards.MouseMove += UpdateResizeCursor;
@@ -153,6 +178,8 @@ internal sealed class MainForm : Form
             button.Size = new Size(buttonSize, buttonSize);
             button.Margin = new Padding(0, 0, (int)(S(2) * scale), 0);
         }
+        _startupFlag.Size = new Size(Math.Max(S(24), (int)(S(28) * scale)), Math.Max(S(24), (int)(S(28) * scale)));
+        _header.ColumnStyles[1].Width = _startupFlag.Width;
         using var outline = RoundedShape.Create(new RectangleF(0, 0, Width, Height), S(26));
         var previousRegion = Region;
         Region = new Region(outline);
@@ -206,6 +233,24 @@ internal sealed class MainForm : Form
         foreach (var (category, tile) in _tiles)
             tile.UpdateTemperature(SummaryRow(snapshot, category)?.Current, !_trayMode);
         if (!_trayMode) UpdateWindow(snapshot);
+        if (_startInTray && _latestStartupLogged == false)
+        {
+            _latestStartupLogged = true;
+            try
+            {
+                var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoyTemperature");
+                Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder, "last-startup.json"), JsonSerializer.Serialize(new
+                {
+                    Timestamp = snapshot.Timestamp, ProcessId = Environment.ProcessId,
+                    IsAdministrator = Program.IsAdministrator,
+                    StartedInTray = !Visible && !ShowInTaskbar && _cpuTray.Visible && _gpuTray.Visible,
+                    CpuTemperature = SummaryRow(snapshot, "CPU")?.Current,
+                    GpuTemperature = SummaryRow(snapshot, "GPU")?.Current
+                }, Program.JsonOptions));
+            }
+            catch (Exception ex) { Program.LogError(ex.ToString()); }
+        }
         RecordVerification(snapshot);
     }
 
@@ -232,6 +277,11 @@ internal sealed class MainForm : Form
     {
         if (_verifyDirectory is null || _verificationFinished) return;
         _samples.Add(snapshot);
+        if (_samples.Count == 1 && _startInTray)
+        {
+            _startupTrayVerified = !Visible && !ShowInTaskbar && _cpuTray.Visible && _gpuTray.Visible;
+            RestoreWindow();
+        }
         File.AppendAllText(Path.Combine(_verifyDirectory, "samples.jsonl"), JsonSerializer.Serialize(snapshot) + Environment.NewLine);
         if (_samples.Count == 2)
         {
@@ -286,9 +336,21 @@ internal sealed class MainForm : Form
         if (_samples.Count >= _verifySamples) FinishVerification();
     }
 
-    private void FinishVerification()
+    private async void FinishVerification()
     {
         _verificationFinished = true;
+        if (_verifyStartupToggle)
+        {
+            var initial = _startupFlag.IsOn;
+            _startupFlag.PerformClick();
+            if (_startupChange is not null) await _startupChange;
+            var changed = Program.StartupEnabled == !initial && _startupFlag.IsOn == !initial;
+            SaveWindow(Path.Combine(_verifyDirectory!, _startupFlag.IsOn ? "startup-on.png" : "startup-off.png"));
+            _startupFlag.PerformClick();
+            if (_startupChange is not null) await _startupChange;
+            _startupToggleVerified = changed && Program.StartupEnabled == initial && _startupFlag.IsOn == initial;
+            SaveWindow(Path.Combine(_verifyDirectory!, initial ? "startup-on.png" : "startup-off.png"));
+        }
         SaveWindow(Path.Combine(_verifyDirectory!, "window.png"));
         using var capture = new Bitmap(Path.Combine(_verifyDirectory!, "window.png"));
         var framePixel = capture.GetPixel(Width / 2, S(2));
@@ -306,6 +368,10 @@ internal sealed class MainForm : Form
             Dpi = DeviceDpi, WindowSize = new { Width, Height },
             AppIconResource = "SoyTemperature.AppIcon",
             TrayMinimizePassed = _trayVerified, TrayRestorePassed = _restoreVerified,
+            StartInTrayRequested = _startInTray, StartupTrayPassed = _startInTray ? _startupTrayVerified : (bool?)null,
+            StartupFlagEnabled = _startupFlag.IsOn,
+            StartupTogglePassed = _verifyStartupToggle ? _startupToggleVerified : (bool?)null,
+            StartupFlagRaised = _startupFlag.FlagHeight == 5,
             HistoryResetPassed = _resetVerified, ResponsiveLayoutPassed = _responsiveVerified,
             LabelsFit = _tiles.Values.All(tile => tile.TextFits) && ButtonFits(),
             MinimalUiPassed = _tiles.Count == 2 && _windowControls.Controls.Count == 3 && _root.Controls.Count == 2,
@@ -336,12 +402,15 @@ internal sealed class MainForm : Form
         if (!_trayVerified || !_restoreVerified || !_resetVerified || !_responsiveVerified || !_resizeVerified || !_cursorVerified || !report.LabelsFit || !report.RoundedWindowPassed || !framePassed
             || (Program.IsAdministrator && LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled && !cpu.HasValue)) Environment.ExitCode = 1;
         if (_verifyWebsite && !_websiteLaunchSucceeded) Environment.ExitCode = 1;
+        if (_startInTray && !_startupTrayVerified) Environment.ExitCode = 1;
+        if (_verifyStartupToggle && !_startupToggleVerified) Environment.ExitCode = 1;
         if (_verifyExit) _closeButton.PerformClick();
     }
 
     private bool ButtonFits()
     {
-        return _windowControls.Controls.Cast<Control>().All(button => button.Width >= S(16)
+        return _startupFlag.Right <= _header.ClientSize.Width && _startupFlag.Bottom <= _header.ClientSize.Height
+            && _windowControls.Controls.Cast<Control>().All(button => button.Width >= S(16)
             && button.Height >= S(16) && button.Right <= _windowControls.ClientSize.Width && button.Bottom <= _windowControls.ClientSize.Height);
     }
 
@@ -370,6 +439,7 @@ internal sealed class MainForm : Form
         if (_closing) return;
         _closing = true;
         _stop.Cancel();
+        if (_startupChange is not null) await _startupChange;
         if (_worker is not null) await _worker;
         _cpuTray.Dispose();
         _gpuTray.Dispose();
@@ -394,10 +464,12 @@ internal sealed class MainForm : Form
         _gpuTray.Visible = true;
         ShowInTaskbar = false;
         Hide();
+        _ = Handle;
     }
 
     private void RestoreWindow()
     {
+        RefreshStartupFlag();
         _trayMode = false;
         ShowInTaskbar = true;
         Show();
@@ -406,6 +478,30 @@ internal sealed class MainForm : Form
         _cpuTray.Visible = false;
         _gpuTray.Visible = false;
         Activate();
+    }
+
+    private void RefreshStartupFlag()
+    {
+        try { _startupFlag.IsOn = Program.StartupEnabled; }
+        catch (Exception ex) { Program.LogError(ex.ToString()); }
+        var description = _startupFlag.IsOn ? "자동 실행 켜짐 · 클릭하면 끄기" : "자동 실행 꺼짐 · 클릭하면 켜기";
+        _startupFlag.AccessibleDescription = description;
+        _toolTip.SetToolTip(_startupFlag, description);
+    }
+
+    private async Task ToggleStartupAsync()
+    {
+        if (!_startupFlag.Enabled) return;
+        _startupFlag.Enabled = false;
+        try
+        {
+            var remove = _startupFlag.IsOn;
+            await Task.Run(() => Program.ConfigureStartup(remove));
+            RefreshStartupFlag();
+            if (_startupFlag.IsOn == remove) throw new InvalidOperationException("자동 실행 설정을 확인할 수 없습니다.");
+        }
+        catch (Exception ex) { Program.LogError(ex.ToString()); MessageBox.Show(this, ex.Message, "자동 실행 설정 실패"); }
+        finally { _startupFlag.Enabled = true; }
     }
 
     private static TemperatureRow? SummaryRow(MonitorSnapshot snapshot, string category) => snapshot.Rows
@@ -437,7 +533,7 @@ internal sealed class MainForm : Form
         try
         {
             await DriverInstaller.InstallAsync(_stop.Token);
-            Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true });
+            Program.RestartRequested = true;
             Close();
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { }
@@ -520,6 +616,11 @@ internal sealed class MainForm : Form
 
     protected override void WndProc(ref Message message)
     {
+        if ((uint)message.Msg == Program.RestoreWindowMessage)
+        {
+            if (!_closing) RestoreWindow();
+            return;
+        }
         base.WndProc(ref message);
         if (message.Msg != 0x84 || WindowState != FormWindowState.Normal) return;
         var packed = message.LParam.ToInt64();
