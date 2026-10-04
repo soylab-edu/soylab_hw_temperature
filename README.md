@@ -4,15 +4,22 @@
 
 현재는 **Windows 10/11 · x64**에서 사용할 수 있습니다. CPU·GPU 온도를 2초마다 확인하는 작은 데스크톱 모니터입니다.
 
-## 다운로드
+## 바로 사용하기
+
+### [▶ Windows 실행 파일 다운로드 — 릴리즈 바로가기](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest)
+
+1. 릴리즈에서 **SoyTemperature.exe**를 다운로드하세요.
+2. 원하는 폴더에 저장하고 실행하세요.
+3. Windows 관리자 승인 창에서 **예**를 누르면 CPU·GPU 온도를 확인할 수 있습니다.
+
+**Git이나 .NET을 따로 설치할 필요가 없습니다.** ZIP으로 받았다면 압축을 풀고 `release/1.0.0/SoyTemperature.exe`를 실행하세요.
 
 | 파일 | 링크 |
 | --- | --- |
 | 단일 실행 파일 | [SoyTemperature.exe 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature.exe) |
 | `release/1.0.0` 폴더 ZIP | [Windows 배포 ZIP 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature-win-x64.zip) |
-| 공개 소스 코드 | [소스 보기](https://github.com/soylab-edu/soylab_hw_temperature/tree/main) · [v1.0.7 소스 ZIP](https://github.com/soylab-edu/soylab_hw_temperature/archive/refs/tags/v1.0.7.zip) |
 
-ZIP을 풀고 **`release/1.0.0/SoyTemperature.exe`**를 실행하세요. 실행 파일 하나에 .NET 런타임·아이콘·글꼴이 포함되어 있어 별도 .NET 설치가 필요 없습니다. 자동 실행에 사용할 고정된 위치에 보관하세요.
+실행 파일에 런타임·아이콘·글꼴이 모두 포함되어 있습니다. 자동 실행을 사용할 경우 파일을 고정된 위치에 보관하세요.
 
 ## 아이콘
 
@@ -67,11 +74,13 @@ Start-Process .\SoyTemperature.exe -ArgumentList '--tray'                  # 트
 
 실행할 때 Windows 관리자 승인 창에서 **예**를 누르세요. 다른 PC에 센서 드라이버가 없다면 우클릭 → **CPU 드라이버 설치**를 선택하세요. 공식 PawnIO 2.2.0 설치 파일의 SHA-256을 확인하고 설치합니다. 드라이버 설치에는 인터넷과 관리자 권한이 필요합니다. 하드웨어·드라이버에서 온도를 제공하지 않는 경우에는 `—`로 표시합니다.
 
-## 공개 소스와 빌드
+## 소스 코드가 필요한 분들을 위해
 
-C# WinForms와 LibreHardwareMonitorLib 0.9.6을 사용합니다. 소스 코드와 빌드·배포 스크립트는 이 공개 저장소에 있습니다.
+C# WinForms와 LibreHardwareMonitorLib 0.9.6을 사용합니다. 소스 코드를 수정하거나 직접 빌드하려면 [Git 공식 홈페이지](https://git-scm.com/)에서 Git을 설치하고, 아래 명령으로 공개 저장소를 받으세요.
 
 ```powershell
+git clone https://github.com/soylab-edu/soylab_hw_temperature.git
+cd soylab_hw_temperature
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 powershell -ExecutionPolicy Bypass -File .\launch.ps1
 powershell -ExecutionPolicy Bypass -File .\package-release.ps1

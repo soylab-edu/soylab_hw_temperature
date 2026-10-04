@@ -2,7 +2,9 @@
 
 **생생하게 PC의 온도를 체크합니다.** 현재는 Windows 10/11 x64에서 사용할 수 있습니다.
 
-[단일 exe 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature.exe) · [release/1.0.0 폴더 ZIP 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature-win-x64.zip) · [공개 소스](https://github.com/soylab-edu/soylab_hw_temperature)
+**[▶ 바로 사용하기 — 릴리즈 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest)**
+
+[단일 exe 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature.exe) · [release/1.0.0 폴더 ZIP 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature-win-x64.zip)
 
 ZIP에는 `release/1.0.0/SoyTemperature.exe` 한 파일이 들어 있습니다. .NET 설치 없이 실행됩니다. 바이너리는 GitHub Releases에서 배포하고, 저장소에는 소스와 다운로드 안내를 공개합니다.
 
