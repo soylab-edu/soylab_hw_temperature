@@ -25,7 +25,8 @@ internal sealed class MainForm : Form
     private readonly ToolTip _toolTip = new();
     private TableLayoutPanel _root = null!;
     private readonly Dictionary<Control, (float Size, FontStyle Style)> _fontSpecs = new();
-    private readonly List<(RoundedPanel Container, TableLayoutPanel Content)> _cardPanels = new();
+    private readonly List<(TelemetryPanel Container, TableLayoutPanel Content)> _cardPanels = new();
+    private readonly Dictionary<string, SignalTrace> _traces = new();
     private FlowLayoutPanel _toolbar = null!;
     private float _sizeScale = 1f;
     private bool _updatingLayout;
@@ -66,8 +67,8 @@ internal sealed class MainForm : Form
         BackColor = BackgroundColor;
         ForeColor = TextColor;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(S(900), S(530));
-        MinimumSize = new Size(S(640), S(385));
+        ClientSize = new Size(S(900), S(585));
+        MinimumSize = new Size(S(640), S(425));
         DoubleBuffered = true;
         BuildLayout();
         _trayMenu.Items.Add("창 열기", null, (_, _) => RestoreWindow());
@@ -95,24 +96,29 @@ internal sealed class MainForm : Form
     private void BuildLayout()
     {
         var root = _root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(S(28)), ColumnCount = 1, RowCount = 6 };
-        foreach (var height in new[] { 64, 38, 230, 68 }) root.RowStyles.Add(new(SizeType.Absolute, S(height)));
+        foreach (var height in new[] { 64, 38, 280, 68 }) root.RowStyles.Add(new(SizeType.Absolute, S(height)));
         root.RowStyles.Add(new(SizeType.Percent, 100));
         root.RowStyles.Add(new(SizeType.Absolute, S(40)));
         Controls.Add(root);
 
-        var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
+        var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
+        heading.RowStyles.Add(new(SizeType.Percent, 85));
+        heading.RowStyles.Add(new(SizeType.Percent, 15));
         heading.ColumnStyles.Add(new(SizeType.Percent, 70));
         heading.ColumnStyles.Add(new(SizeType.Percent, 30));
-        heading.Controls.Add(MakeLabel("SOY Temperature", 24, TextColor, FontStyle.Bold), 0, 0);
-        heading.Controls.Add(new Label { Text = "●  2초마다 업데이트", ForeColor = Theme.Green, Dock = DockStyle.Fill,
+        heading.Controls.Add(MakeLabel("SOY / TEMPERATURE", 22, TextColor, FontStyle.Regular), 0, 0);
+        heading.Controls.Add(new Label { Text = "●  LIVE / 2 SEC", ForeColor = Theme.Coral, Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight, Font = new Font(Font.FontFamily, 10) }, 1, 0);
+        var ruler = new HeaderRuler { Dock = DockStyle.Fill, Margin = new Padding(0, S(3), 0, 0) };
+        heading.Controls.Add(ruler, 0, 1);
+        heading.SetColumnSpan(ruler, 2);
         root.Controls.Add(heading, 0, 0);
 
         _hint.Dock = DockStyle.Fill;
         _hint.TextAlign = ContentAlignment.MiddleLeft;
         _hint.ForeColor = MutedColor;
         _hint.Text = Program.IsAdministrator
-            ? "컴퓨터의 온도를 한눈에."
+            ? "하드웨어 온도 / 실시간 모니터링"
             : "CPU 온도를 보려면 ‘더 보기 → 관리자 실행’을 선택하세요.";
         root.Controls.Add(_hint, 0, 1);
 
@@ -121,12 +127,14 @@ internal sealed class MainForm : Form
         for (var i = 0; i < 3; i++)
         {
             cards.ColumnStyles.Add(new(SizeType.Percent, 100f / 3));
-            var container = new RoundedPanel { Dock = DockStyle.Fill, BackColor = BackgroundColor,
+            var color = i == 0 ? Theme.Coral : i == 1 ? Theme.Lavender : Theme.Green;
+            var container = new TelemetryPanel { Dock = DockStyle.Fill, BackColor = Theme.Surface, Accent = color,
                 Margin = new Padding(i == 0 ? 0 : S(7), S(4), i == 2 ? 0 : S(7), S(4)), Padding = new Padding(S(20), S(16), S(16), S(16)) };
-            var card = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, RowCount = 5, ColumnCount = 1, Margin = Padding.Empty };
+            var card = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, RowCount = 6, ColumnCount = 1, Margin = Padding.Empty };
             foreach (var height in new[] { 28, 39, 80, 29 }) card.RowStyles.Add(new(SizeType.Absolute, S(height)));
+            card.RowStyles.Add(new(SizeType.Absolute, S(25)));
             card.RowStyles.Add(new(SizeType.Percent, 100));
-            card.Controls.Add(MakeLabel(categories[i], 12, i == 0 ? Theme.Coral : i == 1 ? Theme.Lavender : Theme.Green, FontStyle.Bold), 0, 0);
+            card.Controls.Add(MakeLabel($"0{i + 1} / {categories[i]}", 11, color, FontStyle.Bold), 0, 0);
             var device = MakeLabel("검색 중…", 9.5f, MutedColor);
             var value = MakeLabel("—°", 40, TextColor, FontStyle.Regular);
             var range = MakeLabel("최저 —   최고 —", 10, MutedColor);
@@ -135,6 +143,10 @@ internal sealed class MainForm : Form
             card.Controls.Add(value, 0, 2);
             card.Controls.Add(range, 0, 3);
             card.Controls.Add(detail, 0, 4);
+            var trace = new SignalTrace { Dock = DockStyle.Fill, Accent = color, Margin = new Padding(0, S(8), 0, 0) };
+            _toolTip.SetToolTip(trace, "최근 60초 온도 추이 · 실제 측정값");
+            card.Controls.Add(trace, 0, 5);
+            _traces[categories[i]] = trace;
             container.Controls.Add(card);
             _cardPanels.Add((container, card));
             _cards[categories[i]] = (value, device, range, detail);
@@ -152,7 +164,7 @@ internal sealed class MainForm : Form
         {
             _grid.Visible = _details.Checked;
             var area = Screen.FromControl(this).WorkingArea;
-            var ratio = _details.Checked ? 810f / 530 : 530f / 810;
+            var ratio = _details.Checked ? 865f / 585 : 585f / 865;
             ClientSize = new Size(ClientSize.Width, Math.Min((int)(ClientSize.Height * ratio), area.Height - S(45)));
             UpdateResponsiveLayout();
             if (_latest is not null && _details.Checked) UpdateGrid(_latest);
@@ -225,7 +237,7 @@ internal sealed class MainForm : Form
     private Button MakeButton(string text) => new()
     {
         Text = text, AutoSize = true, Height = S(34), Padding = new Padding(S(12), S(3), S(12), S(3)), Margin = new Padding(0, 0, S(10), 0),
-        FlatStyle = FlatStyle.Flat, BackColor = Theme.Button, ForeColor = TextColor, Cursor = Cursors.Hand,
+        FlatStyle = FlatStyle.Flat, BackColor = Theme.Background, ForeColor = TextColor, Cursor = Cursors.Hand,
         UseVisualStyleBackColor = false
     };
 
@@ -276,6 +288,7 @@ internal sealed class MainForm : Form
     {
         if (_closing) return;
         _latest = snapshot;
+        foreach (var (category, trace) in _traces) trace.Add(SummaryTemperature(snapshot, category));
         var cpu = SummaryTemperature(snapshot, "CPU");
         var gpu = SummaryTemperature(snapshot, "GPU");
         _cpuTray.Update(cpu);
@@ -350,7 +363,7 @@ internal sealed class MainForm : Form
                 _detailsVerified = _grid.Visible && _grid.Rows.Count == snapshot.Rows.Count;
                 _details.Checked = false;
                 var original = ClientSize;
-                ClientSize = new Size((int)(640 * DeviceDpi / 96f), (int)(385 * DeviceDpi / 96f));
+                ClientSize = new Size((int)(640 * DeviceDpi / 96f), (int)(425 * DeviceDpi / 96f));
                 UpdateResponsiveLayout();
                 _responsiveVerified = _cards.Values.All(card => LabelFits(card.Value) && LabelFits(card.Range))
                     && _toolbar.Controls.Cast<Control>().All(c => c.Bottom <= _toolbar.ClientSize.Height);
@@ -511,12 +524,12 @@ internal sealed class MainForm : Form
         {
             var dpiScale = DeviceDpi / 96f;
             _sizeScale = Math.Clamp(Math.Min(ClientSize.Width / (900f * dpiScale),
-                ClientSize.Height / ((_details.Checked ? 810f : 530f) * dpiScale)), .65f, 1.4f);
+                ClientSize.Height / ((_details.Checked ? 865f : 585f) * dpiScale)), .65f, 1.4f);
             var previous = Font;
             Font = new Font(previous.FontFamily, 10 * _sizeScale);
             previous.Dispose();
             _root.Padding = new Padding(S(28));
-            int[] heights = [64, 38, 230, 68];
+            int[] heights = [64, 38, 280, 68];
             for (var i = 0; i < heights.Length; i++) _root.RowStyles[i].Height = S(heights[i]);
             _root.RowStyles[5].Height = S(40);
             for (var i = 0; i < _cardPanels.Count; i++)
@@ -526,6 +539,7 @@ internal sealed class MainForm : Form
                 container.Padding = new Padding(S(20), S(16), S(16), S(16));
                 int[] cardHeights = [28, 39, 80, 29];
                 for (var r = 0; r < cardHeights.Length; r++) content.RowStyles[r].Height = S(cardHeights[r]);
+                content.RowStyles[4].Height = S(25);
             }
             _toolbar.Padding = new Padding(0, S(9), 0, 0);
             _details.Margin = new Padding(S(14), S(9), S(20), 0);

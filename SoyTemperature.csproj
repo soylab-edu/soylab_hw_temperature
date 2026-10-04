@@ -16,7 +16,7 @@
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>embedded</DebugType>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Product>SOY Temperature</Product>
     <Description>CPU, GPU, SSD/HDD temperature monitor</Description>
   </PropertyGroup>

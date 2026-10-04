@@ -4,7 +4,7 @@ Windows 10/11 x64용 C# WinForms 온도 모니터. LibreHardwareMonitorLib 0.9.6
 
 ## 실행
 
-`dist/SoyTemperature.exe`를 실행하세요. .NET 런타임이 들어 있는 단일 exe이므로 사용자는 .NET을 따로 설치할 필요가 없습니다. 재빌드에는 .NET 10 SDK가 필요합니다.
+[Windows 실행 파일 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest)에서 ZIP을 풀고 `SoyTemperature.exe`를 실행하세요. 로컬 빌드 결과는 `dist/SoyTemperature.exe`입니다. .NET 런타임이 들어 있는 단일 exe이므로 사용자는 .NET을 따로 설치할 필요가 없습니다. 재빌드에는 .NET 10 SDK가 필요합니다.
 
 - CPU 온도는 **관리자 권한**과 **PawnIO 드라이버**가 필요합니다. exe를 우클릭해 관리자 권한으로 실행하거나, 앱의 **더 보기 → 관리자 실행**을 사용하세요.
 - PawnIO가 없는 다른 PC에서는 **더 보기 → CPU 드라이버 설치**로 공식 PawnIO 2.2.0 설치 파일을 다운로드합니다. SHA-256을 확인한 뒤 UAC 승인을 요청하며, 드라이버 설치에는 인터넷이 필요합니다.
@@ -20,7 +20,7 @@ Windows 10/11 x64용 C# WinForms 온도 모니터. LibreHardwareMonitorLib 0.9.6
 
 ## 화면
 
-SOYLAB Comfy Router의 짙은 보라색과 코랄·라벤더·초록 포인트를 사용합니다. 설치된 SF Pro를 우선 선택하고, 없으면 Segoe UI 계열로 표시합니다. 창 크기와 Windows DPI에 맞춰 글꼴·여백·카드 크기를 조정하며, 온도와 최저·최고값은 공간에 맞게 줄여 표시합니다. 기본 화면에서는 상세 표를 그리지 않고, 트레이에서는 카드와 표를 갱신하지 않습니다.
+SOYLAB Comfy Router의 짙은 보라색과 코랄·라벤더·초록 포인트를 사용하고, [ZIRKA](https://www.cssdesignawards.com/sites/zirka-interceptor/50133/)의 큰 흰색 타이포그래피, 얇은 구분선, 눈금과 모서리 포인트를 참고했습니다. 각 카드에는 실제 측정값으로 그린 최근 60초 온도 추이가 표시됩니다. 설치된 SF Pro를 우선 선택하고, 없으면 Segoe UI 계열로 표시합니다. 창 크기와 Windows DPI에 맞춰 글꼴·여백·카드 크기를 조정하며, 온도와 최저·최고값은 공간에 맞게 줄여 표시합니다. 기본 화면에서는 상세 표를 그리지 않고, 트레이에서는 카드와 표를 갱신하지 않습니다.
 
 ## 빌드
 
