@@ -12,4 +12,5 @@ internal static class Theme
     public static readonly Color Lavender = ColorTranslator.FromHtml("#BB7BFF");
     public static readonly Color Muted = ColorTranslator.FromHtml("#A59CB3");
     public static readonly Color Border = ColorTranslator.FromHtml("#494051");
+    public static readonly Color FrameEdge = ColorTranslator.FromHtml("#A779E6");
 }

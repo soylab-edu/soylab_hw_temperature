@@ -3,7 +3,8 @@ Windows x64 standalone temperature monitor. Download **SoyTemperature.exe** dire
 - Minimal screen: only CPU and GPU temperatures; SSD monitoring removed.
 - Rounded borderless window and cards, generous spacing, embedded Ubuntu Bold typography and SOYLAB purple/accent colors.
 - Subtle 60-second graphs above each temperature. CPU and GPU cards use different warm/cool purple backgrounds with coral/lavender traces; history continues in tray mode.
-- Icon-only minimize-to-tray control illustrates a large window shrinking into a small one.
+- Bold light-purple rounded edge around the outer window.
+- Apple-style top-left controls: red exits the app, yellow minimizes to the temperature tray, green opens https://soylab.ai/ in the default browser. The previous bottom tray button is removed.
 - Drag cards/background to move the window; drag window edges to resize. Compact layout and resize hit testing verified.
 - Fixed missing CPU temperatures after double-clicking: Windows now requests administrator access at startup. Accept the UAC prompt.
 - CPU/GPU temperature numbers continue updating in the system tray every 2 seconds.

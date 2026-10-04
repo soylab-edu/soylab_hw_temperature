@@ -20,8 +20,14 @@ internal sealed class MainForm : Form
     private readonly TrayTemperature _gpuTray;
     private readonly ToolStripMenuItem _cpuText = new("CPU: —") { Enabled = false };
     private readonly ToolStripMenuItem _gpuText = new("GPU: —") { Enabled = false };
-    private readonly TableLayoutPanel _root = new();
-    private readonly WindowMinimizeButton _trayButton = new();
+    private readonly WindowFrame _root = new();
+    private readonly FlowLayoutPanel _windowControls = new();
+    private readonly TrafficLightButton _closeButton = new(WindowAction.Close);
+    private readonly TrafficLightButton _minimizeButton = new(WindowAction.Minimize);
+    private readonly TrafficLightButton _websiteButton = new(WindowAction.Website);
+    private const string SoylabWebsite = "https://soylab.ai/";
+    private readonly bool _verifyWebsite;
+    private bool _websiteLaunchSucceeded;
     private readonly string? _verifyDirectory;
     private readonly bool _verifyExit;
     private readonly int _verifySamples;
@@ -29,13 +35,14 @@ internal sealed class MainForm : Form
     private Task? _worker;
     private MonitorSnapshot? _latest;
     private DateTimeOffset? _historyBeforeReset;
-    private bool _exitRequested, _closing, _canClose, _trayMode;
+    private bool _closing, _canClose, _trayMode;
     private bool _trayVerified, _restoreVerified, _resetVerified, _responsiveVerified, _resizeVerified, _verificationFinished;
 
     public MainForm(string[] args)
     {
         _verifyDirectory = ArgumentValue(args, "--verify");
         _verifyExit = args.Contains("--verify-exit");
+        _verifyWebsite = args.Contains("--verify-website");
         _verifySamples = int.TryParse(ArgumentValue(args, "--verify-samples"), out var count) ? Math.Max(6, count) : 6;
         if (_verifyDirectory is not null) Directory.CreateDirectory(_verifyDirectory);
         Text = "";
@@ -61,7 +68,7 @@ internal sealed class MainForm : Form
         driver.Enabled = !LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled;
         _menu.Items.Add("글꼴 라이선스", null, (_, _) => ShowFontLicense());
         _menu.Items.Add(new ToolStripSeparator());
-        _menu.Items.Add("종료", null, (_, _) => { _exitRequested = true; Close(); });
+        _menu.Items.Add("종료", null, (_, _) => Close());
         ContextMenuStrip = _menu;
         _cpuTray = new TrayTemperature("CPU", Theme.Coral, _menu, RestoreWindow);
         _gpuTray = new TrayTemperature("GPU", Theme.Lavender, _menu, RestoreWindow);
@@ -86,10 +93,24 @@ internal sealed class MainForm : Form
         _root.Dock = DockStyle.Fill;
         _root.ColumnCount = 1;
         _root.RowCount = 2;
+        _root.RowStyles.Add(new(SizeType.Absolute, S(38)));
         _root.RowStyles.Add(new(SizeType.Percent, 100));
-        _root.RowStyles.Add(new(SizeType.Absolute, S(58)));
         Controls.Add(_root);
         _root.MouseDown += DragWindow;
+        _windowControls.Dock = DockStyle.Fill;
+        _windowControls.Margin = Padding.Empty;
+        _windowControls.WrapContents = false;
+        _windowControls.MouseDown += DragWindow;
+        _closeButton.Click += (_, _) => Close();
+        _minimizeButton.Click += (_, _) => MinimizeToTray();
+        _websiteButton.Click += (_, _) => OpenSoylab();
+        foreach (var button in new[] { _closeButton, _minimizeButton, _websiteButton })
+        {
+            button.ContextMenuStrip = _menu;
+            _toolTip.SetToolTip(button, button.AccessibleName);
+            _windowControls.Controls.Add(button);
+        }
+        _root.Controls.Add(_windowControls, 0, 0);
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         cards.MouseDown += DragWindow;
         string[] categories = ["CPU", "GPU"];
@@ -107,16 +128,7 @@ internal sealed class MainForm : Form
             tile.MouseDown += DragWindow;
             cards.Controls.Add(tile, i, 0);
         }
-        _root.Controls.Add(cards, 0, 0);
-        var toolbar = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
-        toolbar.MouseDown += DragWindow;
-        _toolTip.SetToolTip(_trayButton, "트레이로 내리기");
-        _trayButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        _trayButton.ContextMenuStrip = _menu;
-        _trayButton.Click += (_, _) => MinimizeToTray();
-        toolbar.Controls.Add(_trayButton);
-        toolbar.Resize += (_, _) => _trayButton.Location = new Point(toolbar.Width - _trayButton.Width, toolbar.Height - _trayButton.Height);
-        _root.Controls.Add(toolbar, 0, 1);
+        _root.Controls.Add(cards, 0, 1);
         UpdateResponsiveLayout();
     }
 
@@ -127,15 +139,18 @@ internal sealed class MainForm : Form
         if (_tiles.Count != 2 || WindowState == FormWindowState.Minimized) return;
         var scale = Math.Clamp(Math.Min(ClientSize.Width / (520f * DeviceDpi / 96f),
             ClientSize.Height / (300f * DeviceDpi / 96f)), .7f, 1.4f);
-        _root.Padding = new Padding((int)(S(22) * scale));
-        _root.RowStyles[1].Height = S(60) * scale;
-        _trayButton.Size = new Size((int)(S(42) * scale), (int)(S(42) * scale));
+        _root.Padding = new Padding((int)(S(22) * scale), (int)(S(14) * scale), (int)(S(22) * scale), (int)(S(22) * scale));
+        _root.RowStyles[0].Height = S(38) * scale;
+        foreach (var button in new[] { _closeButton, _minimizeButton, _websiteButton })
+        {
+            button.Size = new Size((int)(S(24) * scale), (int)(S(24) * scale));
+            button.Margin = new Padding(0, 0, (int)(S(2) * scale), 0);
+        }
         using var outline = RoundedShape.Create(new RectangleF(0, 0, Width, Height), S(26));
         var previousRegion = Region;
         Region = new Region(outline);
         previousRegion?.Dispose();
-        if (_trayButton.Parent is Control toolbar)
-            _trayButton.Location = new Point(toolbar.Width - _trayButton.Width, toolbar.Height - _trayButton.Height);
+        _root.Invalidate();
     }
 
     private async Task MonitorLoopAsync()
@@ -160,7 +175,7 @@ internal sealed class MainForm : Form
                 await InvokeAsync(() =>
                 {
                     foreach (var tile in _tiles.Values) _toolTip.SetToolTip(tile, ex.Message);
-                    if (_verifyExit) { Environment.ExitCode = 1; _exitRequested = true; Close(); }
+                    if (_verifyExit) { Environment.ExitCode = 1; Close(); }
                 });
         }
         finally
@@ -213,7 +228,7 @@ internal sealed class MainForm : Form
         File.AppendAllText(Path.Combine(_verifyDirectory, "samples.jsonl"), JsonSerializer.Serialize(snapshot) + Environment.NewLine);
         if (_samples.Count == 2)
         {
-            MinimizeToTray();
+            _minimizeButton.PerformClick();
             _trayVerified = !Visible && !ShowInTaskbar && _cpuTray.Visible && _gpuTray.Visible;
             _cpuTray.SavePreview(Path.Combine(_verifyDirectory, "cpu-tray.png"));
             _gpuTray.SavePreview(Path.Combine(_verifyDirectory, "gpu-tray.png"));
@@ -226,8 +241,11 @@ internal sealed class MainForm : Form
             _monitor.RequestReset();
         }
         if (_samples.Count == 4)
+        {
             _resetVerified = snapshot.HistoryStart > _historyBeforeReset
                 && snapshot.Rows.All(r => !r.Current.HasValue || (r.Current == r.Minimum && r.Current == r.Maximum));
+            if (_verifyWebsite) _websiteButton.PerformClick();
+        }
         if (_samples.Count == 5)
         {
             var original = ClientSize;
@@ -249,6 +267,10 @@ internal sealed class MainForm : Form
     {
         _verificationFinished = true;
         SaveWindow(Path.Combine(_verifyDirectory!, "window.png"));
+        using var capture = new Bitmap(Path.Combine(_verifyDirectory!, "window.png"));
+        var framePixel = capture.GetPixel(Width / 2, S(2));
+        var framePassed = Math.Abs(framePixel.R - Theme.FrameEdge.R) + Math.Abs(framePixel.G - Theme.FrameEdge.G)
+            + Math.Abs(framePixel.B - Theme.FrameEdge.B) < 18;
         using (var bitmap = _applicationIcon.ToBitmap()) bitmap.Save(Path.Combine(_verifyDirectory!, "app-icon.png"), ImageFormat.Png);
         var cpu = SummaryRow(_latest!, "CPU")?.Current;
         var report = new
@@ -263,12 +285,18 @@ internal sealed class MainForm : Form
             TrayMinimizePassed = _trayVerified, TrayRestorePassed = _restoreVerified,
             HistoryResetPassed = _resetVerified, ResponsiveLayoutPassed = _responsiveVerified,
             LabelsFit = _tiles.Values.All(tile => tile.TextFits) && ButtonFits(),
-            MinimalUiPassed = _tiles.Count == 2 && _trayButton.Text == "" && _root.Controls.Count == 2,
+            MinimalUiPassed = _tiles.Count == 2 && _windowControls.Controls.Count == 3 && _root.Controls.Count == 2,
             BorderlessWindow = FormBorderStyle == FormBorderStyle.None,
             RoundedWindowPassed = Region is not null && !Region.IsVisible(1, 1)
                 && !Region.IsVisible(Width - 2, 1) && !Region.IsVisible(1, Height - 2)
                 && !Region.IsVisible(Width - 2, Height - 2) && Region.IsVisible(Width / 2, Height / 2),
-            IconOnlyTrayButton = _trayButton.AccessibleName == "트레이로 내리기" && _trayButton.Text.Length == 0,
+            TrafficLightControlsPassed = _windowControls.Controls.Cast<Control>().All(button => button.Text.Length == 0)
+                && _windowControls.Controls[0] == _closeButton && _windowControls.Controls[1] == _minimizeButton && _windowControls.Controls[2] == _websiteButton,
+            WebsiteUrl = SoylabWebsite,
+            WebsiteLaunchPassed = _verifyWebsite ? _websiteLaunchSucceeded : (bool?)null,
+            PurpleFrameColor = ColorTranslator.ToHtml(Theme.FrameEdge),
+            FrameStrokeLogicalPixels = 3.5f,
+            PurpleFrameDrawnPassed = framePassed,
             ResizeEdgesPassed = _resizeVerified,
             StorageMonitoringDisabled = !_latest!.Rows.Any(row => row.Category == "SSD/HDD"),
             TemperatureGraphSamples = _tiles.ToDictionary(pair => pair.Key, pair => pair.Value.GraphSamples),
@@ -280,15 +308,16 @@ internal sealed class MainForm : Form
             FinalSnapshot = _latest
         };
         File.WriteAllText(Path.Combine(_verifyDirectory!, "verification.json"), JsonSerializer.Serialize(report, Program.JsonOptions));
-        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_responsiveVerified || !_resizeVerified || !report.LabelsFit || !report.RoundedWindowPassed
+        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_responsiveVerified || !_resizeVerified || !report.LabelsFit || !report.RoundedWindowPassed || !framePassed
             || (Program.IsAdministrator && LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled && !cpu.HasValue)) Environment.ExitCode = 1;
-        if (_verifyExit) { _exitRequested = true; Close(); }
+        if (_verifyWebsite && !_websiteLaunchSucceeded) Environment.ExitCode = 1;
+        if (_verifyExit) _closeButton.PerformClick();
     }
 
     private bool ButtonFits()
     {
-        return _trayButton.Width >= S(28) && _trayButton.Height >= S(28)
-            && _trayButton.Right <= _trayButton.Parent!.ClientSize.Width;
+        return _windowControls.Controls.Cast<Control>().All(button => button.Width >= S(16)
+            && button.Height >= S(16) && button.Right <= _windowControls.ClientSize.Width && button.Bottom <= _windowControls.ClientSize.Height);
     }
 
     private void SaveWindow(string path)
@@ -313,7 +342,6 @@ internal sealed class MainForm : Form
     {
         if (_canClose) return;
         e.Cancel = true;
-        if (!_exitRequested && e.CloseReason == CloseReason.UserClosing) { MinimizeToTray(); return; }
         if (_closing) return;
         _closing = true;
         _stop.Cancel();
@@ -385,7 +413,6 @@ internal sealed class MainForm : Form
         {
             await DriverInstaller.InstallAsync(_stop.Token);
             Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true });
-            _exitRequested = true;
             Close();
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { }
@@ -406,6 +433,16 @@ internal sealed class MainForm : Form
     }
 
     private static string Format(float? value) => value?.ToString("F1") ?? "—";
+
+    private void OpenSoylab()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(SoylabWebsite) { UseShellExecute = true });
+            _websiteLaunchSucceeded = true;
+        }
+        catch (Exception ex) { Program.LogError(ex.ToString()); MessageBox.Show(this, ex.Message, "웹사이트 열기 실패"); }
+    }
 
     private void DragWindow(object? sender, MouseEventArgs e)
     {
