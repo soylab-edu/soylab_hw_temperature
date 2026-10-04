@@ -24,14 +24,27 @@ internal sealed class StartupFlagButton : Button
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var scale = Math.Min(Width, Height) / 28f;
         e.Graphics.ScaleTransform(scale, scale);
-        var color = !Enabled ? Theme.Border : IsOn ? Theme.Lavender : Theme.Muted;
-        using var pen = new Pen(color, 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        var color = !Enabled ? Theme.Border : IsOn ? Theme.Lavender : Color.FromArgb(103, 88, 120);
+        using var pen = new Pen(color, IsOn ? 2f : 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
         e.Graphics.DrawLine(pen, 7, 4, 7, 24);
-        var top = FlagHeight;
-        PointF[] flag = [new(7, top), new(14, top + 1), new(21, top), new(21, top + 8), new(14, top + 9), new(7, top + 8)];
-        using var fill = new SolidBrush(Color.FromArgb(IsOn ? 90 : 25, color));
-        e.Graphics.FillPolygon(fill, flag);
-        e.Graphics.DrawPolygon(pen, flag);
+        using var flag = new GraphicsPath();
+        if (IsOn)
+        {
+            flag.AddBezier(7, 5, 12, 3, 15, 8, 22, 5);
+            flag.AddLine(22, 5, 22, 14);
+            flag.AddBezier(22, 14, 15, 17, 12, 11, 7, 14);
+        }
+        else
+        {
+            // The cloth folds toward the pole and its free end hangs down.
+            flag.AddBezier(7, 10, 12, 10, 14, 15, 20, 19);
+            flag.AddBezier(20, 19, 20, 22, 16, 24, 13, 22);
+            flag.AddBezier(13, 22, 10, 21, 9, 18, 7, 18);
+        }
+        flag.CloseFigure();
+        using var fill = new SolidBrush(Color.FromArgb(IsOn ? 180 : 35, color));
+        e.Graphics.FillPath(fill, flag);
+        e.Graphics.DrawPath(pen, flag);
         if (Focused) e.Graphics.DrawLine(pen, 5, 26, 23, 26);
     }
 }
