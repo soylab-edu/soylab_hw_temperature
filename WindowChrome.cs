@@ -24,7 +24,7 @@ internal sealed class StartupFlagButton : Button
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var scale = Math.Min(Width, Height) / 28f;
         e.Graphics.ScaleTransform(scale, scale);
-        var color = !Enabled ? Theme.Border : IsOn ? Theme.Lavender : Color.FromArgb(103, 88, 120);
+        var color = IsOn ? Theme.Lavender : Color.FromArgb(103, 88, 120);
         using var pen = new Pen(color, IsOn ? 2f : 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
         e.Graphics.DrawLine(pen, 7, 4, 7, 24);
         using var flag = new GraphicsPath();

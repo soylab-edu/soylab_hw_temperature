@@ -14,6 +14,8 @@ if (-not (Test-Path -LiteralPath $sdkPath)) {
 }
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
-& $sdkPath publish '.\SoyTemperature.csproj' -c Release -r win-x64 --self-contained true -o '.\release\1.0.0'
+$releaseVersion = ([xml](Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'SoyTemperature.csproj'))).Project.PropertyGroup.Version
+$releaseDirectory = Join-Path $PSScriptRoot ('release\' + $releaseVersion)
+& $sdkPath publish '.\SoyTemperature.csproj' -c Release -r win-x64 --self-contained true -o $releaseDirectory
 if ($LASTEXITCODE -ne 0) { throw '빌드 실패' }
-Write-Host "실행 파일: $PSScriptRoot\release\1.0.0\SoyTemperature.exe"
+Write-Host "실행 파일: $releaseDirectory\SoyTemperature.exe"

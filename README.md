@@ -12,12 +12,12 @@
 2. 원하는 폴더에 저장하고 실행하세요.
 3. Windows 관리자 승인 창에서 **예**를 누르면 CPU·GPU 온도를 확인할 수 있습니다.
 
-**Git이나 .NET을 따로 설치할 필요가 없습니다.** ZIP으로 받았다면 압축을 풀고 `release/1.0.0/SoyTemperature.exe`를 실행하세요.
+**Git이나 .NET을 따로 설치할 필요가 없습니다.** ZIP으로 받았다면 압축을 풀고 `release/1.0.9/SoyTemperature.exe`를 실행하세요.
 
 | 파일 | 링크 |
 | --- | --- |
 | 단일 실행 파일 | [SoyTemperature.exe 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature.exe) |
-| `release/1.0.0` 폴더 ZIP | [Windows 배포 ZIP 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature-win-x64.zip) |
+| `release/1.0.9` 폴더 ZIP | [Windows 배포 ZIP 다운로드](https://github.com/soylab-edu/soylab_hw_temperature/releases/latest/download/SoyTemperature-win-x64.zip) |
 
 실행 파일에 런타임·아이콘·글꼴이 모두 포함되어 있습니다. 자동 실행을 사용할 경우 파일을 고정된 위치에 보관하세요.
 
@@ -29,7 +29,9 @@ SOYLAB 컬러 패턴과 커다란 온도계가 어우러진 아이콘입니다.
 
 ## 인터페이스
 
-<img src="img/screenshots/interface.png" alt="실제로 실행한 CPU·GPU 온도 모니터 화면" width="780" />
+<img src="img/screenshots/interface.png" alt="자동 실행 깃발이 활성화된 CPU·GPU 온도 모니터 실제 화면" width="780" />
+
+위 화면의 **밝게 펼쳐진 우상단 깃발은 자동 실행 활성 상태**입니다. 한 번 클릭하면 즉시 어두워지면서 아래로 처지는 비활성 상태로 바뀌고, 다시 한 번 클릭하면 활성 상태로 돌아옵니다.
 
 온도 숫자와 작은 그래프를 중심으로 구성했습니다. Ubuntu Bold 글꼴, 서로 다른 보라색 카드, 코랄·라벤더 그래프와 밝은 보라색 외곽선을 사용합니다. 이미지는 실제 PC에서 측정한 실행 화면이며, 온도는 사용 환경에 따라 달라집니다.
 
@@ -38,7 +40,7 @@ SOYLAB 컬러 패턴과 커다란 온도계가 어우러진 아이콘입니다.
 | 좌상단 빨간 버튼 | 종료 |
 | 좌상단 노란 버튼 | 창을 숨기고 트레이에 CPU·GPU 온도 표시 |
 | 좌상단 초록 버튼 | [소이랩 홈페이지](https://soylab.ai/) 열기 |
-| 우상단 깃발 | **밝게 펴지면 로그인 시 자동 실행 ON**, 어둡게 처지면 OFF |
+| 우상단 깃발 | **밝게 펴지면 자동 실행 활성**, 어둡게 처지면 비활성 |
 | 카드·여백 드래그 | 창 이동 |
 | 가장자리·우하단 손잡이 드래그 | 창 크기 조절 |
 | 트레이 온도 클릭 / 바로가기 재실행 | 기존 창 열기 |
@@ -86,7 +88,7 @@ powershell -ExecutionPolicy Bypass -File .\launch.ps1
 powershell -ExecutionPolicy Bypass -File .\package-release.ps1
 ```
 
-SDK가 없다면 빌드 스크립트가 Microsoft 공식 설치 스크립트로 `.tools/dotnet`에 .NET 10 SDK를 설치합니다. 결과는 `release/1.0.0/SoyTemperature.exe`이며 ZIP에는 이 exe 하나만 넣습니다.
+SDK가 없다면 빌드 스크립트가 Microsoft 공식 설치 스크립트로 `.tools/dotnet`에 .NET 10 SDK를 설치합니다. 실행 파일은 `release/<버전>/SoyTemperature.exe`에 생성되며, ZIP도 같은 버전 폴더에 exe 하나만 담습니다. 현재 배포 버전은 **1.0.9**입니다.
 
 `--self-test`는 센서 기록·초기화를 검증합니다. `--tray --verify C:\Temp\SoyVerification --verify-exit`는 실제 측정, 트레이 시작·숨기기·복원, 작은 창 레이아웃과 크기 조절을 검증하고 캡처·보고서를 저장합니다. `--verify-startup-toggle`을 추가하면 실제 깃발 버튼을 두 번 눌러 설정을 바꾼 뒤 원래 설정으로 복구합니다. 오류 로그는 `%LOCALAPPDATA%/SoyTemperature/errors.log`에 있습니다.
 

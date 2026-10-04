@@ -17,7 +17,7 @@
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>embedded</DebugType>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <Version>1.0.8</Version>
+    <Version>1.0.9</Version>
     <Product>SOY Temperature</Product>
     <Description>CPU and GPU temperature monitor</Description>
   </PropertyGroup>
@@ -29,6 +29,5 @@
     <EmbeddedResource Include="Resources\Fonts\Ubuntu-Bold.ttf" LogicalName="SoyTemperature.UbuntuBold" />
     <EmbeddedResource Include="licenses\Ubuntu-UFL.txt" LogicalName="SoyTemperature.UbuntuLicense" />
     <EmbeddedResource Include="licenses\Ubuntu-COPYRIGHT.txt" LogicalName="SoyTemperature.UbuntuCopyright" />
-    <EmbeddedResource Include="setup-startup.ps1" LogicalName="SoyTemperature.StartupSetup" />
   </ItemGroup>
 </Project>

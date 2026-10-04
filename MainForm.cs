@@ -26,6 +26,8 @@ internal sealed class MainForm : Form
     private readonly StartupFlagButton _startupFlag = new();
     private readonly bool _verifyStartupToggle;
     private Task? _startupChange;
+    private bool _startupSaving;
+    private bool _startupImmediateVerified, _startupRapidVerified;
     private bool _startupToggleVerified;
     private readonly TrafficLightButton _closeButton = new(WindowAction.Close);
     private readonly TrafficLightButton _minimizeButton = new(WindowAction.Minimize);
@@ -135,7 +137,7 @@ internal sealed class MainForm : Form
         }
         _startupFlag.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _startupFlag.Margin = Padding.Empty;
-        _startupFlag.Click += (_, _) => _startupChange = ToggleStartupAsync();
+        _startupFlag.Click += (_, _) => ToggleStartup();
         _header.Controls.Add(_windowControls, 0, 0);
         _header.Controls.Add(_startupFlag, 1, 0);
         _root.Controls.Add(_header, 0, 0);
@@ -343,13 +345,24 @@ internal sealed class MainForm : Form
         {
             var initial = _startupFlag.IsOn;
             _startupFlag.PerformClick();
+            _startupImmediateVerified = _startupFlag.IsOn == !initial && _startupFlag.Enabled;
             if (_startupChange is not null) await _startupChange;
             var changed = Program.StartupEnabled == !initial && _startupFlag.IsOn == !initial;
             SaveWindow(Path.Combine(_verifyDirectory!, _startupFlag.IsOn ? "startup-on.png" : "startup-off.png"));
             _startupFlag.PerformClick();
+            _startupImmediateVerified &= _startupFlag.IsOn == initial && _startupFlag.Enabled;
             if (_startupChange is not null) await _startupChange;
             _startupToggleVerified = changed && Program.StartupEnabled == initial && _startupFlag.IsOn == initial;
             SaveWindow(Path.Combine(_verifyDirectory!, initial ? "startup-on.png" : "startup-off.png"));
+            var rapidStates = new List<bool>();
+            for (var click = 0; click < 4; click++)
+            {
+                _startupFlag.PerformClick();
+                rapidStates.Add(_startupFlag.IsOn);
+            }
+            if (_startupChange is not null) await _startupChange;
+            _startupRapidVerified = rapidStates.SequenceEqual(new[] { !initial, initial, !initial, initial })
+                && Program.StartupEnabled == initial && _startupFlag.IsOn == initial;
         }
         SaveWindow(Path.Combine(_verifyDirectory!, "window.png"));
         using var capture = new Bitmap(Path.Combine(_verifyDirectory!, "window.png"));
@@ -371,6 +384,8 @@ internal sealed class MainForm : Form
             StartInTrayRequested = _startInTray, StartupTrayPassed = _startInTray ? _startupTrayVerified : (bool?)null,
             StartupFlagEnabled = _startupFlag.IsOn,
             StartupTogglePassed = _verifyStartupToggle ? _startupToggleVerified : (bool?)null,
+            StartupImmediateFeedbackPassed = _verifyStartupToggle ? _startupImmediateVerified : (bool?)null,
+            StartupRapidClicksPassed = _verifyStartupToggle ? _startupRapidVerified : (bool?)null,
             StartupFlagRaised = _startupFlag.FlagHeight == 5,
             HistoryResetPassed = _resetVerified, ResponsiveLayoutPassed = _responsiveVerified,
             LabelsFit = _tiles.Values.All(tile => tile.TextFits) && ButtonFits(),
@@ -403,7 +418,7 @@ internal sealed class MainForm : Form
             || (Program.IsAdministrator && LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled && !cpu.HasValue)) Environment.ExitCode = 1;
         if (_verifyWebsite && !_websiteLaunchSucceeded) Environment.ExitCode = 1;
         if (_startInTray && !_startupTrayVerified) Environment.ExitCode = 1;
-        if (_verifyStartupToggle && !_startupToggleVerified) Environment.ExitCode = 1;
+        if (_verifyStartupToggle && (!_startupToggleVerified || !_startupImmediateVerified || !_startupRapidVerified)) Environment.ExitCode = 1;
         if (_verifyExit) _closeButton.PerformClick();
     }
 
@@ -482,26 +497,49 @@ internal sealed class MainForm : Form
 
     private void RefreshStartupFlag()
     {
+        if (_startupSaving) return;
         try { _startupFlag.IsOn = Program.StartupEnabled; }
         catch (Exception ex) { Program.LogError(ex.ToString()); }
-        var description = _startupFlag.IsOn ? "자동 실행 켜짐 · 클릭하면 끄기" : "자동 실행 꺼짐 · 클릭하면 켜기";
+        UpdateStartupDescription();
+    }
+
+    private void UpdateStartupDescription()
+    {
+        var description = _startupFlag.IsOn ? "자동 실행 활성" : "자동 실행 비활성";
         _startupFlag.AccessibleDescription = description;
         _toolTip.SetToolTip(_startupFlag, description);
     }
 
-    private async Task ToggleStartupAsync()
+    private void ToggleStartup()
     {
-        if (!_startupFlag.Enabled) return;
-        _startupFlag.Enabled = false;
+        _startupFlag.IsOn = !_startupFlag.IsOn;
+        UpdateStartupDescription();
+        if (!_startupSaving) _startupChange = SaveStartupAsync();
+    }
+
+    private async Task SaveStartupAsync()
+    {
+        _startupSaving = true;
         try
         {
-            var remove = _startupFlag.IsOn;
-            await Task.Run(() => Program.ConfigureStartup(remove));
-            RefreshStartupFlag();
-            if (_startupFlag.IsOn == remove) throw new InvalidOperationException("자동 실행 설정을 확인할 수 없습니다.");
+            // Each click changes the icon immediately; persistence follows the latest desired state.
+            while (true)
+            {
+                var desired = _startupFlag.IsOn;
+                await Task.Run(() => Program.ConfigureStartup(!desired));
+                if (desired != _startupFlag.IsOn) continue;
+                if (Program.StartupEnabled != desired) throw new InvalidOperationException("자동 실행 설정을 확인할 수 없습니다.");
+                break;
+            }
         }
-        catch (Exception ex) { Program.LogError(ex.ToString()); MessageBox.Show(this, ex.Message, "자동 실행 설정 실패"); }
-        finally { _startupFlag.Enabled = true; }
+        catch (Exception ex)
+        {
+            Program.LogError(ex.ToString());
+            try { _startupFlag.IsOn = Program.StartupEnabled; } catch (Exception readError) { Program.LogError(readError.ToString()); }
+            UpdateStartupDescription();
+            MessageBox.Show(this, ex.Message, "자동 실행 설정 실패");
+        }
+        finally { _startupSaving = false; }
     }
 
     private static TemperatureRow? SummaryRow(MonitorSnapshot snapshot, string category) => snapshot.Rows

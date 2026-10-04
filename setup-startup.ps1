@@ -1,8 +1,12 @@
 param(
-    [string]$Executable = (Join-Path $PSScriptRoot 'release\1.0.0\SoyTemperature.exe'),
+    [string]$Executable,
     [switch]$Remove
 )
 $ErrorActionPreference = 'Stop'
+if (-not $Executable) {
+    $startupVersion = ([xml](Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'SoyTemperature.csproj'))).Project.PropertyGroup.Version
+    $Executable = Join-Path $PSScriptRoot ('release\' + $startupVersion + '\SoyTemperature.exe')
+}
 $startupExecutable = [System.IO.Path]::GetFullPath($Executable)
 $startupTaskName = 'SOY Temperature'
 $startupIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()

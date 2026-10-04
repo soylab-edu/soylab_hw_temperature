@@ -47,29 +47,7 @@ internal static class Program
         if (RestartRequested) Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true });
     }
 
-    internal static void ConfigureStartup(bool remove)
-    {
-        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoyTemperature");
-        Directory.CreateDirectory(folder);
-        var script = Path.Combine(folder, "setup-startup.ps1");
-        using (var source = typeof(Program).Assembly.GetManifestResourceStream("SoyTemperature.StartupSetup")!)
-        using (var destination = File.Create(script)) source.CopyTo(destination);
-        var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-            "WindowsPowerShell", "v1.0", "powershell.exe"))
-        {
-            UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardError = true, RedirectStandardOutput = true
-        };
-        foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
-            "-Executable", Environment.ProcessPath! }) start.ArgumentList.Add(argument);
-        if (remove) start.ArgumentList.Add("-Remove");
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        Task.WaitAll(output, error);
-        if (process.ExitCode != 0) throw new InvalidOperationException(error.Result + output.Result);
-    }
+    internal static void ConfigureStartup(bool remove) => StartupSettings.Configure(remove);
 
     internal static bool StartupEnabled
     {

@@ -25,9 +25,12 @@ jobs:
         run: |
           dotnet restore SoyTemperature.csproj --locked-mode
           if ($LASTEXITCODE -ne 0) { throw 'Restore failed' }
-          dotnet publish SoyTemperature.csproj -c Release -r win-x64 --self-contained true --no-restore -o release/1.0.0
+          $releaseVersion = ([xml](Get-Content -Raw SoyTemperature.csproj)).Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_NAME -ne ('v' + $releaseVersion)) { throw 'Tag and executable versions differ' }
+          $releaseDirectory = 'release/' + $releaseVersion
+          dotnet publish SoyTemperature.csproj -c Release -r win-x64 --self-contained true --no-restore -o $releaseDirectory
           if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
-          $test = Start-Process -FilePath .\release\1.0.0\SoyTemperature.exe -ArgumentList '--self-test' -Wait -PassThru
+          $test = Start-Process -FilePath (Join-Path $releaseDirectory 'SoyTemperature.exe') -ArgumentList '--self-test' -Wait -PassThru
           if ($test.ExitCode -ne 0) { throw 'Sensor history tests failed' }
           .\package-release.ps1 -Output 'SoyTemperature-win-x64.zip'
       - name: Publish release
@@ -35,5 +38,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:GITHUB_REF_NAME SoyTemperature-win-x64.zip release/1.0.0/SoyTemperature.exe --verify-tag --title "SOY Temperature $env:GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          $releaseVersion = ([xml](Get-Content -Raw SoyTemperature.csproj)).Project.PropertyGroup.Version
+          $releaseExecutable = 'release/' + $releaseVersion + '/SoyTemperature.exe'
+          gh release create $env:GITHUB_REF_NAME SoyTemperature-win-x64.zip $releaseExecutable --verify-tag --title "SOY Temperature $env:GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
           if ($LASTEXITCODE -ne 0) { throw 'Release failed' }
