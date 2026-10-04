@@ -5,3 +5,4 @@ vendor/
 artifacts/
 dist/
 *.user
+Resources/PawnIO_setup.exe

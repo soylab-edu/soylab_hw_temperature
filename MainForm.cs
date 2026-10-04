@@ -9,11 +9,11 @@ namespace SoyTemperature;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Color BackgroundColor = Color.FromArgb(245, 245, 247);
-    private static readonly Color PanelColor = Color.White;
-    private static readonly Color TextColor = Color.FromArgb(29, 29, 31);
-    private static readonly Color MutedColor = Color.FromArgb(110, 110, 115);
-    private static readonly Color AccentColor = Color.FromArgb(0, 113, 227);
+    private static readonly Color BackgroundColor = Theme.Background;
+    private static readonly Color PanelColor = Theme.Surface;
+    private static readonly Color TextColor = Color.White;
+    private static readonly Color MutedColor = Theme.Muted;
+    private static readonly Color AccentColor = Theme.Lavender;
     private readonly CancellationTokenSource _stop = new();
     private readonly TemperatureMonitor _monitor = new();
     private readonly DataGridView _grid = new();
@@ -24,6 +24,12 @@ internal sealed class MainForm : Form
     private readonly ContextMenuStrip _moreMenu = new();
     private readonly ToolTip _toolTip = new();
     private TableLayoutPanel _root = null!;
+    private readonly Dictionary<Control, (float Size, FontStyle Style)> _fontSpecs = new();
+    private readonly List<(RoundedPanel Container, TableLayoutPanel Content)> _cardPanels = new();
+    private FlowLayoutPanel _toolbar = null!;
+    private float _sizeScale = 1f;
+    private bool _updatingLayout;
+    private bool _responsiveVerified;
     private readonly string? _verifyDirectory;
     private readonly int _verifySamples;
     private readonly bool _verifyExit;
@@ -53,41 +59,52 @@ internal sealed class MainForm : Form
         _verifyExit = args.Contains("--verify-exit");
         if (_verifyDirectory is not null) Directory.CreateDirectory(_verifyDirectory);
         Text = "SOY Temperature · CPU / GPU / SSD·HDD";
-        AutoScaleDimensions = new SizeF(96F, 96F);
-        AutoScaleMode = AutoScaleMode.Dpi;
+        // This hand-built layout scales pixel dimensions explicitly, including table row styles.
+        AutoScaleMode = AutoScaleMode.None;
+        _ = Handle;
         Font = new Font(SelectFont(), 10);
         BackColor = BackgroundColor;
         ForeColor = TextColor;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(900, 490);
-        MinimumSize = new Size(900, 490);
+        ClientSize = new Size(S(900), S(530));
+        MinimumSize = new Size(S(640), S(385));
         DoubleBuffered = true;
         BuildLayout();
         _trayMenu.Items.Add("창 열기", null, (_, _) => RestoreWindow());
         _trayMenu.Items.AddRange([_cpuTrayText, _gpuTrayText, new ToolStripSeparator()]);
         _trayMenu.Items.Add("최저·최고 초기화", null, (_, _) => _monitor.RequestReset());
         _trayMenu.Items.Add("종료", null, (_, _) => { _exitRequested = true; Close(); });
-        _cpuTray = new TrayTemperature("CPU", Color.FromArgb(83, 217, 192), _trayMenu, RestoreWindow);
-        _gpuTray = new TrayTemperature("GPU", Color.FromArgb(154, 182, 255), _trayMenu, RestoreWindow);
+        _cpuTray = new TrayTemperature("CPU", Theme.Coral, _trayMenu, RestoreWindow);
+        _gpuTray = new TrayTemperature("GPU", Theme.Lavender, _trayMenu, RestoreWindow);
         Icon = SystemIcons.Application;
-        Shown += (_, _) => _worker = Task.Run(MonitorLoopAsync);
-        Resize += (_, _) => { if (WindowState == FormWindowState.Minimized && !_closing) MinimizeToTray(); };
+        Shown += (_, _) =>
+        {
+            var area = Screen.FromControl(this).WorkingArea;
+            Size = new Size(Math.Min(Width, (int)(area.Width * .9)), Math.Min(Height, (int)(area.Height * .9)));
+            UpdateResponsiveLayout();
+            _worker = Task.Run(MonitorLoopAsync);
+        };
+        Resize += (_, _) =>
+        {
+            if (WindowState == FormWindowState.Minimized && !_closing) MinimizeToTray();
+            else if (_root is not null) UpdateResponsiveLayout();
+        };
         FormClosing += OnClosing;
     }
 
     private void BuildLayout()
     {
-        var root = _root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, RowCount = 6 };
-        foreach (var height in new[] { 64f, 38f, 230f, 55f }) root.RowStyles.Add(new(SizeType.Absolute, height));
+        var root = _root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(S(28)), ColumnCount = 1, RowCount = 6 };
+        foreach (var height in new[] { 64, 38, 230, 68 }) root.RowStyles.Add(new(SizeType.Absolute, S(height)));
         root.RowStyles.Add(new(SizeType.Percent, 100));
-        root.RowStyles.Add(new(SizeType.Absolute, 40));
+        root.RowStyles.Add(new(SizeType.Absolute, S(40)));
         Controls.Add(root);
 
         var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
         heading.ColumnStyles.Add(new(SizeType.Percent, 70));
         heading.ColumnStyles.Add(new(SizeType.Percent, 30));
         heading.Controls.Add(MakeLabel("SOY Temperature", 24, TextColor, FontStyle.Bold), 0, 0);
-        heading.Controls.Add(new Label { Text = "●  2초마다 업데이트", ForeColor = Color.FromArgb(45, 135, 80), Dock = DockStyle.Fill,
+        heading.Controls.Add(new Label { Text = "●  2초마다 업데이트", ForeColor = Theme.Green, Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight, Font = new Font(Font.FontFamily, 10) }, 1, 0);
         root.Controls.Add(heading, 0, 0);
 
@@ -105,11 +122,11 @@ internal sealed class MainForm : Form
         {
             cards.ColumnStyles.Add(new(SizeType.Percent, 100f / 3));
             var container = new RoundedPanel { Dock = DockStyle.Fill, BackColor = BackgroundColor,
-                Margin = new Padding(i == 0 ? 0 : 7, 4, i == 2 ? 0 : 7, 4), Padding = new Padding(20, 16, 16, 16) };
+                Margin = new Padding(i == 0 ? 0 : S(7), S(4), i == 2 ? 0 : S(7), S(4)), Padding = new Padding(S(20), S(16), S(16), S(16)) };
             var card = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, RowCount = 5, ColumnCount = 1, Margin = Padding.Empty };
-            foreach (var height in new[] { 28f, 39f, 80f, 29f }) card.RowStyles.Add(new(SizeType.Absolute, height));
+            foreach (var height in new[] { 28, 39, 80, 29 }) card.RowStyles.Add(new(SizeType.Absolute, S(height)));
             card.RowStyles.Add(new(SizeType.Percent, 100));
-            card.Controls.Add(MakeLabel(categories[i], 12, TextColor, FontStyle.Bold), 0, 0);
+            card.Controls.Add(MakeLabel(categories[i], 12, i == 0 ? Theme.Coral : i == 1 ? Theme.Lavender : Theme.Green, FontStyle.Bold), 0, 0);
             var device = MakeLabel("검색 중…", 9.5f, MutedColor);
             var value = MakeLabel("—°", 40, TextColor, FontStyle.Regular);
             var range = MakeLabel("최저 —   최고 —", 10, MutedColor);
@@ -119,22 +136,25 @@ internal sealed class MainForm : Form
             card.Controls.Add(range, 0, 3);
             card.Controls.Add(detail, 0, 4);
             container.Controls.Add(card);
+            _cardPanels.Add((container, card));
             _cards[categories[i]] = (value, device, range, detail);
             cards.Controls.Add(container, i, 0);
         }
         root.Controls.Add(cards, 0, 2);
 
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 9, 0, 0) };
+        var toolbar = _toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, S(9), 0, 0) };
         var reset = MakeButton("기록 초기화");
         reset.Click += (_, _) => { _monitor.RequestReset(); _status.Text = "기록 초기화 요청됨 · 다음 측정부터 새로 기록합니다."; };
         _details.Text = "센서 상세";
         _details.AutoSize = true;
-        _details.Margin = new Padding(14, 9, 20, 0);
+        _details.Margin = new Padding(S(14), S(9), S(20), 0);
         _details.CheckedChanged += (_, _) =>
         {
             _grid.Visible = _details.Checked;
-            var scale = DeviceDpi / 96f;
-            ClientSize = new Size((int)(900 * scale), (int)((_details.Checked ? 770 : 490) * scale));
+            var area = Screen.FromControl(this).WorkingArea;
+            var ratio = _details.Checked ? 810f / 530 : 530f / 810;
+            ClientSize = new Size(ClientSize.Width, Math.Min((int)(ClientSize.Height * ratio), area.Height - S(45)));
+            UpdateResponsiveLayout();
             if (_latest is not null && _details.Checked) UpdateGrid(_latest);
         };
         var tray = MakeButton("트레이로 내리기");
@@ -144,6 +164,8 @@ internal sealed class MainForm : Form
         _moreMenu.Items.Add("CSV 저장", null, (_, _) => ExportCsv());
         var admin = _moreMenu.Items.Add("관리자 실행", null, (_, _) => RestartAsAdministrator());
         admin.Enabled = !Program.IsAdministrator;
+        var driver = _moreMenu.Items.Add("CPU 드라이버 설치", null, async (_, _) => await InstallDriverAsync());
+        driver.Enabled = !LibreHardwareMonitor.PawnIo.PawnIo.IsInstalled;
         _moreMenu.Items.Add(new ToolStripSeparator());
         _moreMenu.Items.Add("종료", null, (_, _) => { _exitRequested = true; Close(); });
         toolbar.Controls.AddRange([reset, _details, tray, more]);
@@ -162,15 +184,15 @@ internal sealed class MainForm : Form
         _grid.MultiSelect = false;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.EnableHeadersVisualStyles = false;
-        _grid.ColumnHeadersHeight = 40;
+        _grid.ColumnHeadersHeight = S(40);
         _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         _grid.ColumnHeadersDefaultCellStyle = new() { BackColor = BackgroundColor, ForeColor = MutedColor,
             Font = new Font(Font.FontFamily, 9, FontStyle.Bold), SelectionBackColor = BackgroundColor };
         _grid.DefaultCellStyle = new() { BackColor = PanelColor, ForeColor = TextColor,
-            SelectionBackColor = Color.FromArgb(225, 237, 252), SelectionForeColor = TextColor, Padding = new Padding(5, 0, 5, 0) };
-        _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 252);
-        _grid.GridColor = Color.FromArgb(230, 230, 234);
-        _grid.RowTemplate.Height = 34;
+            SelectionBackColor = Theme.Button, SelectionForeColor = TextColor, Padding = new Padding(S(5), 0, S(5), 0) };
+        _grid.AlternatingRowsDefaultCellStyle.BackColor = Theme.Background;
+        _grid.GridColor = Theme.Border;
+        _grid.RowTemplate.Height = S(34);
         string[] names = ["분류", "장치", "센서", "현재 °C", "최저 °C", "최고 °C", "상태"];
         int[] widths = [65, 260, 165, 85, 85, 85, 155];
         for (var i = 0; i < names.Length; i++)
@@ -189,16 +211,21 @@ internal sealed class MainForm : Form
         root.Controls.Add(_status, 0, 5);
     }
 
-    private Label MakeLabel(string text, float size, Color color, FontStyle style = FontStyle.Regular) => new()
+    private Label MakeLabel(string text, float size, Color color, FontStyle style = FontStyle.Regular)
     {
-        Text = text, Dock = DockStyle.Fill, AutoEllipsis = true, ForeColor = color,
-        Font = new Font(Font.FontFamily, size, style), TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
-    };
+        var label = new Label
+        {
+            Text = text, Dock = DockStyle.Fill, AutoEllipsis = true, ForeColor = color,
+            Font = new Font(Font.FontFamily, size, style), TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
+        };
+        _fontSpecs[label] = (size, style);
+        return label;
+    }
 
     private Button MakeButton(string text) => new()
     {
-        Text = text, AutoSize = true, Height = 34, Padding = new Padding(12, 3, 12, 3), Margin = new Padding(0, 0, 10, 0),
-        FlatStyle = FlatStyle.Flat, BackColor = PanelColor, ForeColor = TextColor, Cursor = Cursors.Hand,
+        Text = text, AutoSize = true, Height = S(34), Padding = new Padding(S(12), S(3), S(12), S(3)), Margin = new Padding(0, 0, S(10), 0),
+        FlatStyle = FlatStyle.Flat, BackColor = Theme.Button, ForeColor = TextColor, Cursor = Cursors.Hand,
         UseVisualStyleBackColor = false
     };
 
@@ -271,6 +298,9 @@ internal sealed class MainForm : Form
             _toolTip.SetToolTip(labels.Device, row?.Device);
             labels.Range.Text = $"최저 {Format(row?.Minimum)}°   최고 {Format(row?.Maximum)}°";
             labels.Detail.Text = row?.Current is not null ? $"{row.Sensor} · °C" : category == "SSD/HDD" ? "온도 정보 미제공" : "관리자 권한 / 드라이버 확인";
+            FitLabel(labels.Value);
+            FitLabel(labels.Range);
+            FitLabel(labels.Detail);
         }
         _status.Text = $"{snapshot.Timestamp:HH:mm:ss} 업데이트  ·  기록 시작 {snapshot.HistoryStart:HH:mm:ss}"
             + (snapshot.Errors.Count > 0 ? $"  ·  읽기 오류 {snapshot.Errors.Count}개" : "");
@@ -319,6 +349,14 @@ internal sealed class MainForm : Form
                 _details.Checked = true;
                 _detailsVerified = _grid.Visible && _grid.Rows.Count == snapshot.Rows.Count;
                 _details.Checked = false;
+                var original = ClientSize;
+                ClientSize = new Size((int)(640 * DeviceDpi / 96f), (int)(385 * DeviceDpi / 96f));
+                UpdateResponsiveLayout();
+                _responsiveVerified = _cards.Values.All(card => LabelFits(card.Value) && LabelFits(card.Range))
+                    && _toolbar.Controls.Cast<Control>().All(c => c.Bottom <= _toolbar.ClientSize.Height);
+                SaveWindow(Path.Combine(_verifyDirectory, "compact-window.png"));
+                ClientSize = original;
+                UpdateResponsiveLayout();
             }
             if (_samples.Count >= _verifySamples) FinishVerification();
         }
@@ -328,11 +366,7 @@ internal sealed class MainForm : Form
     {
         _verificationFinished = true;
         var intervals = _samples.Zip(_samples.Skip(1), (a, b) => (b.Timestamp - a.Timestamp).TotalMilliseconds).ToArray();
-        using (var bitmap = new Bitmap(Width, Height))
-        {
-            DrawToBitmap(bitmap, new Rectangle(0, 0, Width, Height));
-            bitmap.Save(Path.Combine(_verifyDirectory!, "window.png"), ImageFormat.Png);
-        }
+        SaveWindow(Path.Combine(_verifyDirectory!, "window.png"));
         var report = new
         {
             Started = _samples[0].Timestamp,
@@ -353,6 +387,8 @@ internal sealed class MainForm : Form
             TrayRestorePassed = _restoreVerified,
             HistoryResetPassed = _resetVerified,
             SensorDetailsPassed = _detailsVerified,
+            ResponsiveLayoutPassed = _responsiveVerified,
+            LabelsFit = _cards.Values.All(card => LabelFits(card.Value) && LabelFits(card.Range)),
             FontFamily = Font.FontFamily.Name,
             CpuTrayText = _cpuTray.Text,
             GpuTrayText = _gpuTray.Text,
@@ -365,7 +401,7 @@ internal sealed class MainForm : Form
         };
         File.WriteAllText(Path.Combine(_verifyDirectory!, "verification.json"), JsonSerializer.Serialize(report, Program.JsonOptions));
         // Hardware report is produced on its owning worker after the UI callback returns.
-        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_detailsVerified) Environment.ExitCode = 1;
+        if (!_trayVerified || !_restoreVerified || !_resetVerified || !_detailsVerified || !_responsiveVerified) Environment.ExitCode = 1;
         if (_verifyExit) { _exitRequested = true; Close(); }
     }
 
@@ -463,6 +499,113 @@ internal sealed class MainForm : Form
     }
 
     private static string Format(float? value) => value?.ToString("F1") ?? "—";
+    private int S(int value) => (int)Math.Round(value * DeviceDpi / 96f * _sizeScale);
+
+    private void UpdateResponsiveLayout()
+    {
+        if (_updatingLayout || _root is null || _cardPanels.Count != 3 || WindowState == FormWindowState.Minimized) return;
+        _updatingLayout = true;
+        SuspendLayout();
+        _root.SuspendLayout();
+        try
+        {
+            var dpiScale = DeviceDpi / 96f;
+            _sizeScale = Math.Clamp(Math.Min(ClientSize.Width / (900f * dpiScale),
+                ClientSize.Height / ((_details.Checked ? 810f : 530f) * dpiScale)), .65f, 1.4f);
+            var previous = Font;
+            Font = new Font(previous.FontFamily, 10 * _sizeScale);
+            previous.Dispose();
+            _root.Padding = new Padding(S(28));
+            int[] heights = [64, 38, 230, 68];
+            for (var i = 0; i < heights.Length; i++) _root.RowStyles[i].Height = S(heights[i]);
+            _root.RowStyles[5].Height = S(40);
+            for (var i = 0; i < _cardPanels.Count; i++)
+            {
+                var (container, content) = _cardPanels[i];
+                container.Margin = new Padding(i == 0 ? 0 : S(7), S(4), i == 2 ? 0 : S(7), S(4));
+                container.Padding = new Padding(S(20), S(16), S(16), S(16));
+                int[] cardHeights = [28, 39, 80, 29];
+                for (var r = 0; r < cardHeights.Length; r++) content.RowStyles[r].Height = S(cardHeights[r]);
+            }
+            _toolbar.Padding = new Padding(0, S(9), 0, 0);
+            _details.Margin = new Padding(S(14), S(9), S(20), 0);
+            foreach (Control control in _toolbar.Controls)
+                if (control is Button button)
+                {
+                    button.Padding = new Padding(S(12), S(3), S(12), S(3));
+                    button.Margin = new Padding(0, 0, S(10), 0);
+                }
+            foreach (var (control, spec) in _fontSpecs)
+            {
+                var old = control.Font;
+                control.Font = new Font(Font.FontFamily, spec.Size * _sizeScale, spec.Style);
+                old.Dispose();
+            }
+            _grid.RowTemplate.Height = S(34);
+            _grid.ColumnHeadersHeight = S(40);
+        }
+        finally
+        {
+            _root.ResumeLayout(true);
+            ResumeLayout(true);
+            _updatingLayout = false;
+        }
+        foreach (var card in _cards.Values)
+        {
+            FitLabel(card.Value);
+            FitLabel(card.Range);
+            FitLabel(card.Detail);
+        }
+    }
+
+    private void FitLabel(Label label)
+    {
+        if (label.Width < 1 || label.Height < 1 || !_fontSpecs.TryGetValue(label, out var spec)) return;
+        var target = spec.Size * _sizeScale;
+        using var graphics = label.CreateGraphics();
+        Font? chosen = null;
+        for (var size = target; size >= target * .65f; size -= .25f)
+        {
+            chosen?.Dispose();
+            chosen = new Font(Font.FontFamily, size, spec.Style);
+            var measured = TextRenderer.MeasureText(graphics, label.Text, chosen, Size.Empty, TextFormatFlags.SingleLine);
+            if (measured.Width <= label.Width && measured.Height <= label.Height) break;
+        }
+        if (chosen is not null)
+        {
+            var old = label.Font;
+            label.Font = chosen;
+            old.Dispose();
+        }
+    }
+
+    private static bool LabelFits(Label label)
+    {
+        using var graphics = label.CreateGraphics();
+        var measured = TextRenderer.MeasureText(graphics, label.Text, label.Font, Size.Empty, TextFormatFlags.SingleLine);
+        return measured.Width <= label.Width && measured.Height <= label.Height;
+    }
+
+    private void SaveWindow(string path)
+    {
+        using var bitmap = new Bitmap(Width, Height);
+        DrawToBitmap(bitmap, new Rectangle(0, 0, Width, Height));
+        bitmap.Save(path, ImageFormat.Png);
+    }
+
+    private async Task InstallDriverAsync()
+    {
+        _status.Text = "공식 PawnIO 드라이버를 다운로드하고 있습니다…";
+        try
+        {
+            await DriverInstaller.InstallAsync(_stop.Token);
+            _status.Text = "드라이버 설치 완료 · 관리자 모드로 다시 실행합니다.";
+            RestartAsAdministrator();
+        }
+        catch (OperationCanceledException) { _status.Text = "설치를 취소했습니다."; }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { _status.Text = "드라이버 설치가 취소되었습니다."; }
+        catch (Exception ex) { Program.LogError(ex.ToString()); _status.Text = $"드라이버 설치 실패: {ex.Message}"; }
+    }
     private static string Invariant(float? value) => value?.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) ?? "";
     private static string CsvQuote(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
     private static string? ArgumentValue(string[] args, string key)
