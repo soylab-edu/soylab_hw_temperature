@@ -3,8 +3,8 @@ namespace SoyTemperature;
 // Palette: soylab-edu/ComfyUI-soylab-router, web/router.js (ffda499).
 internal static class Theme
 {
-    public static readonly Color Background = ColorTranslator.FromHtml("#1E1B25");
-    public static readonly Color Surface = ColorTranslator.FromHtml("#211C2A");
+    public static readonly Color Background = ColorTranslator.FromHtml("#19161F");
+    public static readonly Color Surface = ColorTranslator.FromHtml("#25212F");
     public static readonly Color Purple = ColorTranslator.FromHtml("#2E104B");
     public static readonly Color Button = ColorTranslator.FromHtml("#422670");
     public static readonly Color Coral = ColorTranslator.FromHtml("#FF705B");

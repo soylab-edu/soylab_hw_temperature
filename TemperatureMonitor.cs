@@ -1,5 +1,4 @@
 using LibreHardwareMonitor.Hardware;
-using System.Management;
 
 namespace SoyTemperature;
 
@@ -28,26 +27,14 @@ internal sealed class SensorHistory
 
 internal sealed class TemperatureMonitor : IDisposable
 {
-    private readonly Computer _computer = new() { IsCpuEnabled = true, IsGpuEnabled = true, IsStorageEnabled = true };
+    private readonly Computer _computer = new() { IsCpuEnabled = true, IsGpuEnabled = true };
     private readonly SensorHistory _history = new();
     private DateTimeOffset _historyStart = DateTimeOffset.Now;
     private long _sequence;
     private int _resetRequested;
-    private readonly List<string> _storageInventory = new();
     public void Open()
     {
         _computer.Open();
-        // Keep physical disks visible even if a vendor driver exposes no SMART temperature.
-        try
-        {
-            using var searcher = new ManagementObjectSearcher("SELECT Model FROM Win32_DiskDrive");
-            using var disks = searcher.Get();
-            foreach (ManagementObject disk in disks)
-            {
-                using (disk) { if (disk["Model"] is string model) _storageInventory.Add(model.Trim()); }
-            }
-        }
-        catch (Exception ex) { Program.LogError(ex.ToString()); }
     }
     public void RequestReset() => Interlocked.Exchange(ref _resetRequested, 1);
     public string GetReport() => _computer.GetReport();
@@ -68,7 +55,6 @@ internal sealed class TemperatureMonitor : IDisposable
             {
                 HardwareType.Cpu => "CPU",
                 HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel => "GPU",
-                HardwareType.Storage => "SSD/HDD",
                 _ => null
             };
             if (category is null) continue;
@@ -78,16 +64,10 @@ internal sealed class TemperatureMonitor : IDisposable
                 rows.Add(new(hardware.Identifier.ToString(), category, hardware.Name, "온도 센서 없음",
                     null, null, null, "미지원 / 권한 확인"));
         }
-        foreach (var category in new[] { "CPU", "GPU", "SSD/HDD" })
+        foreach (var category in new[] { "CPU", "GPU" })
             if (!rows.Any(r => r.Category == category))
-            {
-                if (category == "SSD/HDD" && _storageInventory.Count > 0)
-                    foreach (var model in _storageInventory)
-                        rows.Add(new($"unsupported-storage/{model}", category, model, "온도 센서 접근 불가",
-                            null, null, null, "SMART 미지원 / 권한 확인"));
-                else rows.Add(new($"missing/{category}", category, "장치가 감지되지 않았습니다", "—",
+                rows.Add(new($"missing/{category}", category, "장치가 감지되지 않았습니다", "—",
                     null, null, null, "장치 없음 / 권한 확인"));
-            }
         return new(DateTimeOffset.Now, ++_sequence, _historyStart, rows, errors);
     }
 
